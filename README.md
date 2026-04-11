@@ -186,17 +186,27 @@ Each service runs as its own service user except FlareSolverr:
 
 | Service | User | Group |
 |---|---|---|
-| Radarr | radarr | radarr, plex |
-| Sonarr | sonarr | sonarr, plex |
+| Radarr | radarr | radarr, plex, rdtclient |
+| Sonarr | sonarr | sonarr, plex, rdtclient |
 | Prowlarr | prowlarr | prowlarr |
-| rdt-client | rdtclient | rdtclient |
+| rdt-client | rdtclient | rdtclient, plex |
 | FlareSolverr | your sudo user | your user's primary group |
 
-The `radarr` and `sonarr` users are added to the configured media group so Plex can read files they write. The downloads directory is owned by `rdtclient`. Radarr and Sonarr move completed downloads to the media library after import.
+The `radarr` and `sonarr` users are added to both the configured media group and the `rdtclient` group so they can import completed downloads. The `rdtclient` user is also added to the configured media group so downloaded files stay accessible to Plex after import.
 
-The media directories use setgid (`chmod g+s`) so new files inherit the shared media group automatically.
+The media directories use setgid (`chmod g+s`) so new files inherit the shared media group automatically. The downloads directory and its category folders are also setgid so any new subdirectories created by `rdt-client` inherit the `rdtclient` group.
 
 FlareSolverr runs as your actual user because it needs access to your `pyenv` installation and Python virtualenv.
+
+If you already installed the stack before this permissions fix, apply the same group changes manually and restart the affected services:
+
+```bash
+sudo usermod -aG rdtclient radarr
+sudo usermod -aG rdtclient sonarr
+sudo usermod -aG plex rdtclient
+sudo chmod g+s /mnt/raid/media/Downloads
+sudo systemctl restart radarr sonarr rdt-client
+```
 
 ## Ports
 
@@ -219,6 +229,6 @@ sudo ufw allow 7878
 ## Known Issues
 
 - rdt-client database and log paths must be set in `appsettings.json` before the service starts because the default `/data/db` path does not exist on a bare-metal install
-- rdt-client runs as the `rdtclient` user, so the downloads directory must be owned by that user
+- rdt-client runs as the `rdtclient` user, so the downloads directory must be owned by that user and shared with `radarr` and `sonarr` through the `rdtclient` group
 - FlareSolverr requires `pyenv` and `pyenv-virtualenv` for the sudo user, plus the system Chromium and Xvfb packages the installer adds
 - Sonarr can show `No indexers available` health warnings if Prowlarr sync does not push indexers correctly; re-saving the Sonarr app entry in Prowlarr forces a re-sync

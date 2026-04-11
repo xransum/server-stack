@@ -217,6 +217,9 @@ install_rdtclient() {
     info "Installing rdt-client..."
 
     create_service_user rdtclient
+    usermod -aG "$MEDIA_GROUP" rdtclient
+    usermod -aG rdtclient radarr
+    usermod -aG rdtclient sonarr
 
     rm -rf /opt/rdt-client
     mkdir -p /opt/rdt-client
@@ -225,7 +228,9 @@ install_rdtclient() {
     chown -R rdtclient:rdtclient /opt/rdt-client
     rm -f /tmp/rdt-client.zip
 
+    # Share the downloads path between rdt-client and the *arr services.
     chown -R rdtclient:rdtclient "$DOWNLOADS_DIR"
+    chmod 2775 "$DOWNLOADS_DIR" "$DOWNLOADS_DIR/radarr" "$DOWNLOADS_DIR/sonarr"
 
     install -m 0644 /dev/stdin /opt/rdt-client/appsettings.json <<EOF
 {
@@ -263,6 +268,7 @@ EOF
 
     systemctl daemon-reload
     systemctl enable --now rdt-client
+    systemctl restart radarr sonarr rdt-client
 
     allow_lan_port 6500
 
