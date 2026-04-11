@@ -337,6 +337,40 @@ EOF
     ok "FlareSolverr installed - http://localhost:8191"
 }
 
+# CLAMAV
+
+install_clamav() {
+    info "Installing ClamAV..."
+
+    apt install -y clamav clamav-daemon
+    systemctl stop clamav-freshclam || true
+    freshclam
+    systemctl enable --now clamav-freshclam
+    systemctl enable --now clamav-daemon
+
+    install -m 0755 /dev/stdin /usr/local/bin/scan-media.sh <<'EOF'
+#!/bin/bash
+
+file="$1"
+
+if [ -z "$file" ] || [ ! -e "$file" ]; then
+    exit 0
+fi
+
+clamscan --no-summary --quiet "$file"
+status=$?
+
+if [ "$status" -eq 1 ]; then
+    logger -t clamav "INFECTED FILE DETECTED: $file"
+    rm -f "$file"
+elif [ "$status" -gt 1 ]; then
+    logger -t clamav "ClamAV scan failed for $file with exit code $status"
+fi
+EOF
+
+    ok "ClamAV installed - add /usr/local/bin/scan-media.sh as a Custom Script in Radarr and Sonarr (On Import trigger)"
+}
+
 # SUMMARY
 
 print_summary() {
@@ -374,6 +408,11 @@ print_summary() {
     echo "      -> add FlareSolverr at http://localhost:8191"
     echo "    - Assign to Cloudflare-protected indexers"
     echo ""
+    echo " 7. ClamAV"
+    echo "    - In Radarr + Sonarr: Settings -> Connect"
+    echo "      -> Custom Script -> /usr/local/bin/scan-media.sh"
+    echo "      -> Trigger: On Import"
+    echo ""
     echo "================================================"
 }
 
@@ -389,4 +428,5 @@ install_sonarr
 install_prowlarr
 install_rdtclient
 install_flaresolverr
+install_clamav
 print_summary

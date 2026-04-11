@@ -232,3 +232,126 @@ sudo ufw allow 7878
 - rdt-client runs as the `rdtclient` user, so the downloads directory must be owned by that user and shared with `radarr` and `sonarr` through the `rdtclient` group
 - FlareSolverr requires `pyenv` and `pyenv-virtualenv` for the sudo user, plus the system Chromium and Xvfb packages the installer adds
 - Sonarr can show `No indexers available` health warnings if Prowlarr sync does not push indexers correctly; re-saving the Sonarr app entry in Prowlarr forces a re-sync
+
+## Malware Scanning
+
+ClamAV is used to automatically scan downloaded media files after Sonarr and Radarr import them.
+
+### Install ClamAV
+
+The installer now installs `clamav` and `clamav-daemon` and creates `/usr/local/bin/scan-media.sh` for you.
+
+If you want to install it manually instead:
+
+```bash
+sudo apt install -y clamav clamav-daemon
+sudo systemctl stop clamav-freshclam
+sudo freshclam
+sudo systemctl start clamav-freshclam
+sudo systemctl enable clamav-daemon
+```
+
+### Scan Script
+
+The generated `/usr/local/bin/scan-media.sh` script:
+
+```bash
+#!/bin/bash
+
+file="$1"
+
+if [ -z "$file" ] || [ ! -e "$file" ]; then
+    exit 0
+fi
+
+clamscan --no-summary --quiet "$file"
+status=$?
+
+if [ "$status" -eq 1 ]; then
+    logger -t clamav "INFECTED FILE DETECTED: $file"
+    rm -f "$file"
+elif [ "$status" -gt 1 ]; then
+    logger -t clamav "ClamAV scan failed for $file with exit code $status"
+fi
+```
+
+### Connect To Radarr And Sonarr
+
+In both Radarr and Sonarr:
+
+- Settings -> Connect -> Add -> Custom Script
+  - Name: ClamAV Scan
+  - Path: `/usr/local/bin/scan-media.sh`
+  - Trigger: On Import
+  - Save
+
+Every imported file will be scanned automatically after it lands in your media library.
+
+### Exclude File Types From rdt-client Downloads
+
+In rdt-client -> Settings -> qBittorrent / *darr, add this regex to the excluded files field to prevent junk files from being downloaded alongside the media:
+
+```text
+(?i).*\.(txt|jpg|jpeg|png|torrent|nfo|exe|sh|bash|md[0-9])$
+```
+
+## Quality And Language Filtering
+
+### Block Foreign Dubs In Sonarr
+
+To prevent Sonarr from grabbing foreign language dubs, add a Custom Format:
+
+- Settings -> Custom Formats -> Add
+- Add a condition: Language -> English, check Except Language
+- Save the custom format
+- Go to your quality profile and set this custom format score to `-10000`
+
+This effectively blacklists any non-English release.
+
+### Block CAM Releases
+
+In Radarr and Sonarr quality profiles, disable CAM, Telecine, and Telesync qualities so they are never grabbed.
+
+## Troubleshooting Import Issues
+
+### Files Downloading As Folders
+
+`rdt-client` sometimes creates a folder named after the `.mkv` file and puts the actual file inside it, which breaks Sonarr and Radarr import. Flatten them with:
+
+```bash
+cd /mnt/raid/media/Downloads/sonarr
+for dir in *.mkv; do
+    if [ -d "$dir" ]; then
+        sudo mv "$dir/$dir" "${dir}.tmp"
+        sudo rm -rf "$dir"
+        sudo mv "${dir}.tmp" "$dir"
+    fi
+done
+
+for dir in */; do
+    if [ -d "$dir" ]; then
+        sudo find "$dir" -name "*.mkv" -exec sudo mv {} . \;
+        sudo rm -rf "$dir"
+    fi
+done
+```
+
+### Sonarr Not Importing After Downloads Complete
+
+If files are in the downloads folder but Sonarr is not importing them:
+
+1. Check permissions. Sonarr needs read and move access to the download folder.
+
+```bash
+sudo chown -R sonarr:sonarr /mnt/raid/media/Downloads/sonarr
+```
+
+2. Use Manual Import as a fallback:
+
+- Sonarr -> Wanted -> Manual Import
+- Point it at `/mnt/raid/media/Downloads/sonarr`
+- Match the files to episodes and import them
+
+### Sonarr Mapped A Show To The Wrong Folder
+
+If Sonarr mapped a show to an existing folder from your pre-existing media library, remove the show from Sonarr without deleting files, then edit the show path to point at the correct folder.
