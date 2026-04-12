@@ -38,6 +38,7 @@ require_root() {
 
 require_group() {
     getent group "$MEDIA_GROUP" >/dev/null || die "Group '$MEDIA_GROUP' does not exist"
+    groupadd mediadl 2>/dev/null || true
 }
 
 require_sudo_user() {
@@ -217,9 +218,6 @@ install_rdtclient() {
     info "Installing rdt-client..."
 
     create_service_user rdtclient
-    usermod -aG "$MEDIA_GROUP" rdtclient
-    usermod -aG rdtclient radarr
-    usermod -aG rdtclient sonarr
 
     rm -rf /opt/rdt-client
     mkdir -p /opt/rdt-client
@@ -229,7 +227,8 @@ install_rdtclient() {
     rm -f /tmp/rdt-client.zip
 
     # Share the downloads path between rdt-client and the *arr services.
-    chown -R rdtclient:rdtclient "$DOWNLOADS_DIR"
+    chown -R rdtclient:mediadl "$DOWNLOADS_DIR"
+    chmod -R g+rw "$DOWNLOADS_DIR"
     chmod 2775 "$DOWNLOADS_DIR" "$DOWNLOADS_DIR/radarr" "$DOWNLOADS_DIR/sonarr"
 
     install -m 0644 /dev/stdin /opt/rdt-client/appsettings.json <<EOF
@@ -268,7 +267,6 @@ EOF
 
     systemctl daemon-reload
     systemctl enable --now rdt-client
-    systemctl restart radarr sonarr rdt-client
 
     allow_lan_port 6500
 
@@ -371,6 +369,122 @@ EOF
     ok "ClamAV installed - add /usr/local/bin/scan-media.sh as a Custom Script in Radarr and Sonarr (On Import trigger)"
 }
 
+# FLATTEN DOWNLOADS
+
+install_flatten() {
+    info "Installing flatten-downloads service..."
+
+    apt install -y inotify-tools
+
+    install -m 0755 /dev/stdin /usr/local/bin/flatten-downloads.sh <<'EOF'
+#!/bin/bash
+
+WATCH_DIRS=(
+    "/mnt/raid/media/Downloads/radarr"
+    "/mnt/raid/media/Downloads/sonarr"
+)
+
+flatten() {
+    local dir="$1"
+
+    if [[ "$dir" != *.mkv ]]; then
+        return
+    fi
+
+    local count
+    count=$(find "$dir" -maxdepth 1 -name "*.mkv" | wc -l)
+
+    if [ "$count" -ne 1 ]; then
+        return
+    fi
+
+    local file
+    file=$(find "$dir" -maxdepth 1 -name "*.mkv")
+
+    # Wait until file size stops changing (download complete)
+    local prev_size=-1
+    local curr_size
+    while true; do
+        curr_size=$(stat -c%s "$file" 2>/dev/null || echo 0)
+        if [ "$curr_size" -eq "$prev_size" ] && [ "$curr_size" -gt 0 ]; then
+            break
+        fi
+        prev_size=$curr_size
+        sleep 10
+    done
+
+    local parent
+    parent=$(dirname "$dir")
+    local base
+    base=$(basename "$file")
+
+    mv "$file" "$parent/${base}.tmp"
+    rm -rf "$dir"
+    mv "$parent/${base}.tmp" "$parent/$base"
+
+    chown rdtclient:mediadl "$parent/$base"
+    chmod 664 "$parent/$base"
+
+    echo "Flattened and fixed permissions: $parent/$base"
+}
+
+export -f flatten
+
+for WATCH_DIR in "${WATCH_DIRS[@]}"; do
+    inotifywait -m -e create -e moved_to --format '%w%f' "$WATCH_DIR" | while read path; do
+        if [ -d "$path" ]; then
+            flatten "$path" &
+        fi
+    done &
+done
+
+wait
+EOF
+
+    install -m 0644 /dev/stdin /etc/systemd/system/flatten-downloads.service <<'EOF'
+[Unit]
+Description=Flatten single-file mkv download folders
+After=network.target
+
+[Service]
+User=root
+ExecStart=/usr/local/bin/flatten-downloads.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable --now flatten-downloads
+
+    ok "flatten-downloads service installed and running"
+}
+
+# GROUP PERMISSIONS
+
+setup_groups() {
+    info "Setting up shared media group permissions..."
+
+    for user in rdtclient radarr sonarr prowlarr plex tautulli "$SUDO_USER"; do
+        usermod -aG mediadl "$user" 2>/dev/null || warn "Could not add $user to mediadl (user may not exist)"
+    done
+
+    # plex group for media library access
+    usermod -aG "$MEDIA_GROUP" radarr 2>/dev/null || true
+    usermod -aG "$MEDIA_GROUP" sonarr 2>/dev/null || true
+    usermod -aG "$MEDIA_GROUP" rdtclient 2>/dev/null || true
+
+    chown -R rdtclient:mediadl "$DOWNLOADS_DIR"
+    chmod -R g+rw "$DOWNLOADS_DIR"
+    chmod g+s "$DOWNLOADS_DIR/radarr"
+    chmod g+s "$DOWNLOADS_DIR/sonarr"
+
+    systemctl restart radarr sonarr rdt-client prowlarr
+
+    ok "Group permissions set"
+}
+
 # SUMMARY
 
 print_summary() {
@@ -429,4 +543,6 @@ install_prowlarr
 install_rdtclient
 install_flaresolverr
 install_clamav
+install_flatten
+setup_groups
 print_summary
