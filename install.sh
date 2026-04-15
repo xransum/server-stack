@@ -125,7 +125,8 @@ After=network.target
 
 [Service]
 User=radarr
-Group=radarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Radarr/Radarr -nobrowser -data=/var/lib/radarr
 Restart=on-failure
 
@@ -161,7 +162,8 @@ After=network.target
 
 [Service]
 User=sonarr
-Group=sonarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Sonarr/Sonarr -nobrowser -data=/var/lib/sonarr
 Restart=on-failure
 
@@ -196,7 +198,8 @@ After=network.target
 
 [Service]
 User=prowlarr
-Group=prowlarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Prowlarr/Prowlarr -nobrowser -data=/var/lib/prowlarr
 Restart=on-failure
 
@@ -256,9 +259,10 @@ After=network.target
 
 [Service]
 User=rdtclient
-Group=rdtclient
+Group=mediadl
+UMask=0002
 WorkingDirectory=/opt/rdt-client
-ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll
+ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll --urls=http://0.0.0.0:6500
 Restart=on-failure
 
 [Install]
@@ -387,19 +391,25 @@ WATCH_DIRS=(
 flatten() {
     local dir="$1"
 
-    if [[ "$dir" != *.mkv ]]; then
+    if [[ "$dir" != *.mkv ]] && [[ "$dir" != *.mp4 ]]; then
         return
     fi
 
-    local count
-    count=$(find "$dir" -maxdepth 1 -name "*.mkv" | wc -l)
-
-    if [ "$count" -ne 1 ]; then
-        return
-    fi
-
+    # Wait for the actual media file (not .download temp file)
     local file
-    file=$(find "$dir" -maxdepth 1 -name "*.mkv")
+    local attempts=0
+    while true; do
+        file=$(find "$dir" -maxdepth 1 \( -name "*.mkv" -o -name "*.mp4" \) ! -name "*.download" 2>/dev/null | head -1)
+        if [ -n "$file" ]; then
+            break
+        fi
+        attempts=$((attempts + 1))
+        if [ "$attempts" -gt 60 ]; then
+            echo "Timed out waiting for completed file in $dir"
+            return
+        fi
+        sleep 10
+    done
 
     # Wait until file size stops changing (download complete)
     local prev_size=-1
@@ -422,10 +432,7 @@ flatten() {
     rm -rf "$dir"
     mv "$parent/${base}.tmp" "$parent/$base"
 
-    chown rdtclient:mediadl "$parent/$base"
-    chmod 664 "$parent/$base"
-
-    echo "Flattened and fixed permissions: $parent/$base"
+    echo "Flattened: $parent/$base"
 }
 
 export -f flatten
@@ -441,13 +448,15 @@ done
 wait
 EOF
 
-    install -m 0644 /dev/stdin /etc/systemd/system/flatten-downloads.service <<'EOF'
+    install -m 0644 /dev/stdin /etc/systemd/system/flatten-downloads.service <<EOF
 [Unit]
 Description=Flatten single-file mkv download folders
 After=network.target
 
 [Service]
-User=root
+User=$SUDO_USER
+Group=mediadl
+UMask=0002
 ExecStart=/usr/local/bin/flatten-downloads.sh
 Restart=on-failure
 

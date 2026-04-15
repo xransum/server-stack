@@ -12,7 +12,8 @@ Self-hosted media automation stack on Debian 12 using Real-Debrid.
 | [rdt-client](docs/rdt-client.md) | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
 | [FlareSolverr](docs/flaresolverr.md) | Cloudflare bypass proxy | 8191 | [Install & Config](docs/flaresolverr.md) |
 | [ClamAV](docs/clamav.md) | Malware scanning | - | [Install & Config](docs/clamav.md) |
-| [Flatten Downloads](docs/flatten-downloads.md) | Auto-flatten nested mkv folders | - | [Install & Config](docs/flatten-downloads.md) |
+| [Flatten Downloads](docs/flatten-downloads.md) | Auto-flatten nested mkv/mp4 folders | - | [Install & Config](docs/flatten-downloads.md) |
+| [Notifications](docs/notifications.md) | Discord webhook alerts | - | [Setup Guide](docs/notifications.md) |
 
 Plex, Overseerr, and Tautulli are assumed to already be installed and are not managed by this stack.
 
@@ -93,6 +94,7 @@ Each service can be installed independently. See the individual docs for step-by
 6. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
 7. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 8. [Flatten Downloads](docs/flatten-downloads.md) - install the auto-flatten service (optional)
+9. [Notifications](docs/notifications.md) - set up Discord webhook alerts (optional)
 
 ## Permissions
 
@@ -115,5 +117,5 @@ sudo journalctl -u rdt-client -n 50
 
 - rdt-client's `appsettings.json` must be configured before first start (default Docker paths do not exist). See [rdt-client docs](docs/rdt-client.md#application-settings).
 - FlareSolverr effectiveness depends on Chromium version. Debian 12 stable ships Chromium ~131 which may not solve newer Cloudflare challenges. See [FlareSolverr docs](docs/flaresolverr.md#chromium-compatibility).
-- The flatten-downloads service only handles single-file mkv folders. See [limitations](docs/flatten-downloads.md#limitations).
+- The flatten-downloads service only handles single-file mkv and mp4 folders. See [limitations](docs/flatten-downloads.md#limitations).
 - Sonarr can show `No indexers available` if Prowlarr sync fails. See [Prowlarr troubleshooting](docs/prowlarr.md#troubleshooting).

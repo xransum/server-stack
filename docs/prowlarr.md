@@ -50,7 +50,8 @@ After=network.target
 
 [Service]
 User=prowlarr
-Group=prowlarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Prowlarr/Prowlarr -nobrowser -data=/var/lib/prowlarr
 Restart=on-failure
 

@@ -73,7 +73,8 @@ After=network.target
 
 [Service]
 User=radarr
-Group=radarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Radarr/Radarr -nobrowser -data=/var/lib/radarr
 Restart=on-failure
 
@@ -115,8 +116,46 @@ Open `http://localhost:7878` in your browser.
 
 ### Quality Profile
 
-- Settings -> Profiles -> edit your quality profile
-- Disable CAM, Telecine, and Telesync to avoid bad quality grabs
+- Set **Maximum Size** at the indexer level (Settings -> Indexers -> edit indexer -> Maximum Size) rather than per-profile for a global cap.
+- Avoid **Remux** quality tiers if storage is a concern. A 4K WEB-DL encode is typically 15-20 GB vs 50-70 GB for a remux, with minimal perceptible quality difference for home viewing.
+
+### Custom Formats
+
+#### Bad Sources
+
+Create a custom format to block low-quality sources:
+
+- Settings -> Custom Formats -> Add
+- Name: `Bad Sources`
+- Add conditions (type: Source): `UNKNOWN`, `CAM`, `TELESYNC`, `TELECINE`, `WORKPRINT`
+- Save
+
+In each quality profile, set the score for Bad Sources to `-10000`.
+
+#### Blocked Releases
+
+Create a custom format to block unwanted release groups and foreign-language uploads:
+
+- Settings -> Custom Formats -> Add
+- Name: `Blocked Releases`
+- Add conditions (type: Release Title, use regex):
+  - Cyrillic characters: `[А-Яа-яЁё]`
+  - Known bad groups: `\b(Zamez|Hamster|HDCLUB)\b`
+  - Multi-language indicators (adjust as needed): `\b(MULTI|MULTi)\b`
+- Save
+
+In each quality profile, set the score for Blocked Releases to `-10000`.
+
+### Replacing An Oversized File
+
+If Radarr grabbed a remux or other oversized file and you want a smaller encode:
+
+1. Do **not** delete the movie from Radarr
+2. Go to the movie's quality profile and uncheck the quality tier the current file matches (e.g. `Remux-2160p`)
+3. Run **Automatic Search** on the movie
+4. Radarr will grab a replacement matching the remaining allowed tiers and swap the file automatically
+
+There is no need to re-request through Overseerr.
 
 ### ClamAV Integration
 

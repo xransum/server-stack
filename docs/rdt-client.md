@@ -92,9 +92,10 @@ After=network.target
 
 [Service]
 User=rdtclient
-Group=rdtclient
+Group=mediadl
+UMask=0002
 WorkingDirectory=/opt/rdt-client
-ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll
+ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll --urls=http://0.0.0.0:6500
 Restart=on-failure
 
 [Install]

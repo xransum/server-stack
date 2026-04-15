@@ -4,7 +4,7 @@ Automatic flattening of single-file download folders created by rdt-client.
 
 ## The Problem
 
-rdt-client creates a folder for each download and puts the file inside it. When a torrent contains a single mkv file, this results in a nested structure:
+rdt-client creates a folder for each download and puts the file inside it. When a torrent contains a single media file, this results in a nested structure:
 
 ```text
 Downloads/radarr/Movie.Name.mkv/   <- folder
@@ -15,7 +15,7 @@ Radarr and Sonarr cannot import from this structure because they expect the file
 
 ## The Solution
 
-The `flatten-downloads` service watches both download directories using `inotifywait` and automatically flattens single-file mkv folders once the download is complete.
+The `flatten-downloads` service watches both download directories using `inotifywait` and automatically flattens single-file `.mkv` and `.mp4` folders once the download is complete.
 
 Multi-file downloads (season packs, movies with subtitles) are left untouched since they contain more than one file.
 
@@ -23,10 +23,13 @@ Multi-file downloads (season packs, movies with subtitles) are left untouched si
 
 1. rdt-client creates a folder in the radarr or sonarr download directory
 2. `inotifywait` detects the new folder instantly
-3. The script checks if the folder name ends in `.mkv` and contains exactly one `.mkv` file
-4. It polls the file size every 10 seconds until it stops changing (download complete)
-5. Once complete, it moves the mkv out of the folder, removes the folder, and fixes ownership to `rdtclient:mediadl` with `664` permissions
-6. Radarr/Sonarr can now import cleanly
+3. The script checks if the folder name ends in `.mkv` or `.mp4`
+4. It waits for rdt-client to finish writing the `.download` temp file and rename it to the final filename (up to 10 minutes)
+5. It polls the file size every 10 seconds until it stops changing (download complete)
+6. Once complete, it moves the file out of the folder and removes the folder
+7. Radarr/Sonarr can now import cleanly
+
+Permissions are handled by the service umask (`0002`) and group (`mediadl`), so no `chown`/`chmod` is needed after flattening.
 
 ## Prerequisites
 
@@ -49,19 +52,25 @@ WATCH_DIRS=(
 flatten() {
     local dir="$1"
 
-    if [[ "$dir" != *.mkv ]]; then
+    if [[ "$dir" != *.mkv ]] && [[ "$dir" != *.mp4 ]]; then
         return
     fi
 
-    local count
-    count=$(find "$dir" -maxdepth 1 -name "*.mkv" | wc -l)
-
-    if [ "$count" -ne 1 ]; then
-        return
-    fi
-
+    # Wait for the actual media file (not .download temp file)
     local file
-    file=$(find "$dir" -maxdepth 1 -name "*.mkv")
+    local attempts=0
+    while true; do
+        file=$(find "$dir" -maxdepth 1 \( -name "*.mkv" -o -name "*.mp4" \) ! -name "*.download" 2>/dev/null | head -1)
+        if [ -n "$file" ]; then
+            break
+        fi
+        attempts=$((attempts + 1))
+        if [ "$attempts" -gt 60 ]; then
+            echo "Timed out waiting for completed file in $dir"
+            return
+        fi
+        sleep 10
+    done
 
     # Wait until file size stops changing (download complete)
     local prev_size=-1
@@ -84,10 +93,7 @@ flatten() {
     rm -rf "$dir"
     mv "$parent/${base}.tmp" "$parent/$base"
 
-    chown rdtclient:mediadl "$parent/$base"
-    chmod 664 "$parent/$base"
-
-    echo "Flattened and fixed permissions: $parent/$base"
+    echo "Flattened: $parent/$base"
 }
 
 export -f flatten
@@ -119,7 +125,9 @@ Description=Flatten single-file mkv download folders
 After=network.target
 
 [Service]
-User=root
+User=kevin
+Group=mediadl
+UMask=0002
 ExecStart=/usr/local/bin/flatten-downloads.sh
 Restart=on-failure
 
@@ -127,14 +135,14 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
+Replace `kevin` with your username if different.
+
 Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now flatten-downloads
 ```
-
-The service runs as root because it needs to change file ownership after flattening.
 
 ## Service Management
 
@@ -150,7 +158,7 @@ If the service was not running when downloads completed, or you need to fix exis
 
 ```bash
 cd /mnt/raid/media/Downloads/sonarr
-for dir in *.mkv; do
+for dir in *.mkv *.mp4; do
     if [ -d "$dir" ]; then
         sudo mv "$dir/$dir" "${dir}.tmp"
         sudo rm -rf "$dir"
@@ -160,7 +168,7 @@ done
 
 for dir in */; do
     if [ -d "$dir" ]; then
-        sudo find "$dir" -name "*.mkv" -exec sudo mv {} . \;
+        sudo find "$dir" \( -name "*.mkv" -o -name "*.mp4" \) -exec sudo mv {} . \;
         sudo rm -rf "$dir"
     fi
 done
@@ -170,8 +178,9 @@ Repeat for `/mnt/raid/media/Downloads/radarr` if needed.
 
 ## Limitations
 
-- Only handles folders whose name ends in `.mkv`
-- Only flattens folders containing exactly one `.mkv` file
+- Only handles folders whose name ends in `.mkv` or `.mp4`
+- Only flattens folders containing a single media file
 - Multi-file downloads (season packs, extras) are ignored
-- Non-mkv formats (`.mp4`, `.avi`) in nested folders are not handled
+- Other formats (`.avi`, `.ts`) in nested folders are not handled
+- The `.download` temp file wait has a 10-minute timeout - stalled downloads are skipped
 - The 10-second polling interval means there is a brief delay after download completion before the file is flattened

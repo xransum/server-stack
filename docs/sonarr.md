@@ -56,7 +56,8 @@ After=network.target
 
 [Service]
 User=sonarr
-Group=sonarr
+Group=mediadl
+UMask=0002
 ExecStart=/opt/Sonarr/Sonarr -nobrowser -data=/var/lib/sonarr
 Restart=on-failure
 
@@ -94,20 +95,37 @@ Open `http://localhost:8989` in your browser.
 
 - Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid/media/Videos/TV Shows`
 
-### Block Foreign Dubs
+### Quality Profile
 
-To prevent Sonarr from grabbing foreign language dubs:
+- Set **Language** to `English` in each quality profile. This filters at the profile level so a separate custom format for English-only is redundant.
+- Set **Maximum Size** at the indexer level (Settings -> Indexers -> edit indexer -> Maximum Size) rather than per-profile. This applies a global cap across all profiles.
+
+### Custom Formats
+
+#### Bad Sources
+
+Create a custom format to block low-quality sources:
 
 - Settings -> Custom Formats -> Add
-- Add a condition: Language -> English, check Except Language
-- Save the custom format
-- Go to your quality profile and set this custom format score to `-10000`
+- Name: `Bad Sources`
+- Add conditions (type: Source): `UNKNOWN`, `CAM`, `TELESYNC`, `TELECINE`, `WORKPRINT`
+- Save
 
-This effectively blacklists any non-English release.
+In each quality profile, set the score for Bad Sources to `-10000`.
 
-### Block CAM Releases
+#### Blocked Releases
 
-In your quality profile, disable CAM, Telecine, and Telesync qualities so they are never grabbed.
+Create a custom format to block unwanted release groups and foreign-language uploads:
+
+- Settings -> Custom Formats -> Add
+- Name: `Blocked Releases`
+- Add conditions (type: Release Title, use regex):
+  - Cyrillic characters: `[А-Яа-яЁё]`
+  - Known bad groups: `\b(Zamez|Hamster|HDCLUB)\b`
+  - Multi-language indicators (adjust as needed): `\b(MULTI|MULTi)\b`
+- Save
+
+In each quality profile, set the score for Blocked Releases to `-10000`.
 
 ### ClamAV Integration
 
