@@ -1,0 +1,13 @@
+[Unit]
+Description=Prowlarr
+After=network.target
+
+[Service]
+User=media
+Group=media
+UMask=0002
+ExecStart=/opt/Prowlarr/Prowlarr -nobrowser -data=/var/lib/prowlarr
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

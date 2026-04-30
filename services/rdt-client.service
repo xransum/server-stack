@@ -1,0 +1,14 @@
+[Unit]
+Description=rdt-client
+After=network.target
+
+[Service]
+User=media
+Group=media
+UMask=0002
+WorkingDirectory=/opt/rdt-client
+ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll --urls=http://0.0.0.0:6500
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -3,7 +3,7 @@
 Movie management and automation. Radarr monitors for new movies, searches indexers via Prowlarr, sends torrents to rdt-client, and imports completed downloads into your media library.
 
 - **Port**: 7878
-- **Runs as**: `radarr` system user
+- **Runs as**: `media` system user
 - **Install path**: `/opt/Radarr`
 - **Config/database**: `/var/lib/radarr`
 - **Media root**: `/mnt/raid/media/Videos/Movies`
@@ -11,8 +11,7 @@ Movie management and automation. Radarr monitors for new movies, searches indexe
 ## Prerequisites
 
 - ASP.NET Core runtime 10.0 (see [System Dependencies](#system-dependencies))
-- The `plex` group must exist (Radarr is added to it for media library access)
-- The `mediadl` group must exist (for shared download directory access). See [permissions](permissions.md).
+- The `media` user must exist and own the install paths. See [permissions](permissions.md).
 
 ## System Dependencies
 
@@ -33,12 +32,11 @@ rm /tmp/ms-prod.deb
 
 ## Install
 
-Create the service user:
+Create the config directory and set ownership:
 
 ```bash
-sudo useradd -r -s /usr/sbin/nologin radarr
-sudo usermod -aG plex radarr
-sudo usermod -aG mediadl radarr
+sudo mkdir -p /var/lib/radarr
+sudo chown media:media /var/lib/radarr
 ```
 
 Download and extract Radarr (replace the version as needed):
@@ -51,42 +49,8 @@ sudo rm -rf /opt/Radarr
 sudo mkdir -p /opt/Radarr
 curl -fsSL "$RADARR_URL" -o /tmp/radarr.tar.gz
 sudo tar -xzf /tmp/radarr.tar.gz -C /opt/Radarr --strip-components=1
-sudo chown -R radarr:radarr /opt/Radarr
+sudo chown -R media:media /opt/Radarr
 rm /tmp/radarr.tar.gz
-```
-
-Create the config directory:
-
-```bash
-sudo mkdir -p /var/lib/radarr
-sudo chown radarr:radarr /var/lib/radarr
-```
-
-## Systemd Service
-
-Create `/etc/systemd/system/radarr.service`:
-
-```ini
-[Unit]
-Description=Radarr
-After=network.target
-
-[Service]
-User=radarr
-Group=mediadl
-UMask=0002
-ExecStart=/opt/Radarr/Radarr -nobrowser -data=/var/lib/radarr
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now radarr
 ```
 
 ## Firewall
@@ -113,49 +77,6 @@ Open `http://localhost:7878` in your browser.
 ### Root Folder
 
 - Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid/media/Videos/Movies`
-
-### Quality Profile
-
-- Set **Maximum Size** at the indexer level (Settings -> Indexers -> edit indexer -> Maximum Size) rather than per-profile for a global cap.
-- Avoid **Remux** quality tiers if storage is a concern. A 4K WEB-DL encode is typically 15-20 GB vs 50-70 GB for a remux, with minimal perceptible quality difference for home viewing.
-
-### Custom Formats
-
-#### Bad Sources
-
-Create a custom format to block low-quality sources:
-
-- Settings -> Custom Formats -> Add
-- Name: `Bad Sources`
-- Add conditions (type: Source): `UNKNOWN`, `CAM`, `TELESYNC`, `TELECINE`, `WORKPRINT`
-- Save
-
-In each quality profile, set the score for Bad Sources to `-10000`.
-
-#### Blocked Releases
-
-Create a custom format to block unwanted release groups and foreign-language uploads:
-
-- Settings -> Custom Formats -> Add
-- Name: `Blocked Releases`
-- Add conditions (type: Release Title, use regex):
-  - Cyrillic characters: `[А-Яа-яЁё]`
-  - Known bad groups: `\b(Zamez|Hamster|HDCLUB)\b`
-  - Multi-language indicators (adjust as needed): `\b(MULTI|MULTi)\b`
-- Save
-
-In each quality profile, set the score for Blocked Releases to `-10000`.
-
-### Replacing An Oversized File
-
-If Radarr grabbed a remux or other oversized file and you want a smaller encode:
-
-1. Do **not** delete the movie from Radarr
-2. Go to the movie's quality profile and uncheck the quality tier the current file matches (e.g. `Remux-2160p`)
-3. Run **Automatic Search** on the movie
-4. Radarr will grab a replacement matching the remaining allowed tiers and swap the file automatically
-
-There is no need to re-request through Overseerr.
 
 ### ClamAV Integration
 
@@ -185,9 +106,67 @@ curl -fsSL "https://github.com/Radarr/Radarr/releases/download/v${RADARR_VERSION
 sudo rm -rf /opt/Radarr
 sudo mkdir -p /opt/Radarr
 sudo tar -xzf /tmp/radarr.tar.gz -C /opt/Radarr --strip-components=1
-sudo chown -R radarr:radarr /opt/Radarr
+sudo chown -R media:media /opt/Radarr
 rm /tmp/radarr.tar.gz
 sudo systemctl start radarr
 ```
 
 Your configuration in `/var/lib/radarr` is preserved across updates.
+
+## Service file
+
+Copy the service file from the repo and enable it:
+
+```bash
+sudo cp services/radarr.service /etc/systemd/system/radarr.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now radarr
+```
+
+## Quality profiles
+
+### Language
+Set Language to `English` in each quality profile (Settings > Profiles) to filter
+non-English releases.
+
+### Bad Sources custom format
+Go to Settings > Custom Formats > + and create a format called `Bad Sources`.
+Add a Source condition for each of the following, then set the score to `-10000`
+in all quality profiles:
+- UNKNOWN
+- CAM
+- TELESYNC
+- TELECINE
+- WORKPRINT
+
+### Blocked Releases custom format
+Create a custom format called `Blocked Releases` with a Release Title condition
+using the regex `[А-Яа-яЁё]` to catch Cyrillic characters in release names.
+Set the score to `-10000` in all quality profiles.
+
+### Size limits
+Set Maximum Size at the indexer level (Settings > Indexers > edit each indexer)
+rather than per quality profile. This applies a global cap regardless of which
+profile a movie uses.
+
+### Remux files
+Remux files are uncompressed disc rips and can be extremely large (50-70GB for a
+single movie). A standard 4K WEB-DL encode is typically 15-25GB with no perceptible
+quality difference for home viewing. Consider unchecking Remux quality tiers from
+your profile unless you specifically want them.
+
+## Replacing oversized files
+
+To replace an existing file with a smaller encode without going through Overseerr:
+
+1. In the quality profile uncheck the quality tier the current file matches
+   (e.g. uncheck Remux-2160p if the file is a remux)
+2. Go to the movie page in Radarr and click Automatic Search
+3. Radarr will grab a replacement and swap the file automatically
+4. Re-enable the quality tier in the profile after the replacement downloads
+
+Do not delete the movie from Radarr or Overseerr - just update the profile and search.
+
+## Notifications
+
+See [notifications](notifications.md) for Discord webhook setup.

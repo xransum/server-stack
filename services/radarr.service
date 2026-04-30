@@ -1,0 +1,13 @@
+[Unit]
+Description=Radarr
+After=network.target
+
+[Service]
+User=media
+Group=media
+UMask=0002
+ExecStart=/opt/Radarr/Radarr -nobrowser -data=/var/lib/radarr
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

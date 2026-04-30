@@ -3,7 +3,7 @@
 Real-Debrid download client. rdt-client acts as a qBittorrent-compatible API that Radarr and Sonarr can use as a download client. It sends torrents to Real-Debrid for debridding and then downloads the resulting files locally.
 
 - **Port**: 6500
-- **Runs as**: `rdtclient` system user
+- **Runs as**: `media` system user
 - **Install path**: `/opt/rdt-client`
 - **Downloads**: `/mnt/raid/media/Downloads`
 - **Database**: `/mnt/raid/media/Downloads/rdtclient.db`
@@ -14,17 +14,9 @@ Real-Debrid download client. rdt-client acts as a qBittorrent-compatible API tha
 - ASP.NET Core runtime 10.0 (see [Radarr prerequisites](radarr.md#system-dependencies) for install steps)
 - An active Real-Debrid premium subscription
 - An API key from `https://real-debrid.com/apitoken`
-- The `mediadl` group must exist. See [permissions](permissions.md).
+- The `media` user must exist. See [permissions](permissions.md).
 
 ## Install
-
-Create the service user:
-
-```bash
-sudo useradd -r -s /usr/sbin/nologin rdtclient
-sudo usermod -aG mediadl rdtclient
-sudo usermod -aG plex rdtclient
-```
 
 Download and extract rdt-client:
 
@@ -35,7 +27,7 @@ sudo rm -rf /opt/rdt-client
 sudo mkdir -p /opt/rdt-client
 curl -fsSL "$RDTCLIENT_URL" -o /tmp/rdt-client.zip
 sudo unzip -q /tmp/rdt-client.zip -d /opt/rdt-client
-sudo chown -R rdtclient:rdtclient /opt/rdt-client
+sudo chown -R media:media /opt/rdt-client
 rm /tmp/rdt-client.zip
 ```
 
@@ -45,12 +37,8 @@ Create the download directories and set permissions:
 
 ```bash
 sudo mkdir -p /mnt/raid/media/Downloads/radarr /mnt/raid/media/Downloads/sonarr
-sudo chown -R rdtclient:mediadl /mnt/raid/media/Downloads
-sudo chmod -R g+rw /mnt/raid/media/Downloads
-sudo chmod 2775 /mnt/raid/media/Downloads /mnt/raid/media/Downloads/radarr /mnt/raid/media/Downloads/sonarr
+sudo chown -R media:media /mnt/raid/media/Downloads
 ```
-
-The setgid (`2775`) ensures new files inherit the `mediadl` group so Radarr and Sonarr can read and move them.
 
 ## Application Settings
 
@@ -76,38 +64,10 @@ Create `/opt/rdt-client/appsettings.json`:
 ```
 
 ```bash
-sudo chown rdtclient:rdtclient /opt/rdt-client/appsettings.json
+sudo chown media:media /opt/rdt-client/appsettings.json
 ```
 
 This must be done before starting the service. If the default `/data/db` path is used, rdt-client will fail to start.
-
-## Systemd Service
-
-Create `/etc/systemd/system/rdt-client.service`:
-
-```ini
-[Unit]
-Description=rdt-client
-After=network.target
-
-[Service]
-User=rdtclient
-Group=mediadl
-UMask=0002
-WorkingDirectory=/opt/rdt-client
-ExecStart=/usr/bin/dotnet /opt/rdt-client/RdtClient.Web.dll --urls=http://0.0.0.0:6500
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now rdt-client
-```
 
 ## Firewall
 
@@ -160,7 +120,7 @@ curl -fsSL "https://github.com/rogerfar/rdt-client/releases/latest/download/Real
 sudo rm -rf /opt/rdt-client
 sudo mkdir -p /opt/rdt-client
 sudo unzip -q /tmp/rdt-client.zip -d /opt/rdt-client
-sudo chown -R rdtclient:rdtclient /opt/rdt-client
+sudo chown -R media:media /opt/rdt-client
 rm /tmp/rdt-client.zip
 ```
 
@@ -186,6 +146,22 @@ sudo systemctl start rdt-client
 
 This can happen if the API key was entered incorrectly multiple times.
 
-### Downloads Creating Nested Folders
+## Service file
 
-rdt-client sometimes creates a folder named after the file and puts the actual file inside it (e.g., `Movie.Name.mkv/Movie.Name.mkv`). This breaks Radarr/Sonarr import. See [flatten-downloads](flatten-downloads.md) for the automated solution.
+Copy the service file from the repo and enable it:
+
+```bash
+sudo cp services/rdt-client.service /etc/systemd/system/rdt-client.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now rdt-client
+```
+
+## Post-install configuration
+
+After starting rdt-client and logging in at http://localhost:6500, configure the
+following in Settings > qBittorrent / *darr:
+
+- **Post Download Action**: Set to `Remove Torrent From Client And Provider` to
+  automatically clean up completed downloads
+- **Exclude files**: Add `.*\.(txt|jpg|jpeg|png|torrent|nfo|exe|sh|bash|md[0-9])$`
+  to skip junk files included in some torrents

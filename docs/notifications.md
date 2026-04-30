@@ -1,41 +1,32 @@
-# Discord Notifications
+# Notifications
 
-Set up Discord webhook notifications for Radarr and Sonarr to get alerts when new content is downloaded or upgraded.
+Sonarr and Radarr both support Discord webhook notifications natively.
 
-## Discord Webhook Setup
+## Discord setup
 
-1. In your Discord server, go to the channel you want notifications in
-2. Edit Channel -> Integrations -> Webhooks -> New Webhook
-3. Name it (e.g. `Radarr` or `Sonarr`) and copy the webhook URL
+1. In your Discord server, open the channel you want notifications in
+2. Go to channel Settings > Integrations > Webhooks > New Webhook
+3. Copy the webhook URL
+4. In Sonarr or Radarr go to Settings > Connect > + > Discord
+5. Paste the webhook URL and save
 
-You can use separate channels for movies and TV (e.g. `#movie-updates` and `#tv-updates`) or a shared channel (e.g. `#media-updates`).
+## Recommended triggers
 
-## Radarr
+### Sonarr
+- On Import - fires when a new episode is downloaded and added to the library
+- On Upgrade - fires when a better quality version replaces an existing file
+- On Health Issue - fires when something breaks in Sonarr
 
-1. Settings -> Connect -> + -> Discord
-2. Paste your webhook URL
-3. Recommended triggers:
-   - **On Import** - notifies when a new movie is downloaded and imported
-   - **On Upgrade** - notifies when a better quality version replaces an existing file
-4. Test and Save
+### Radarr
+- On Import - fires when a new movie is downloaded and added to the library
+- On Upgrade - fires when a better quality version replaces an existing file
+- On Health Issue - fires when something breaks in Radarr
 
-## Sonarr
+## Notes
 
-1. Settings -> Connect -> + -> Discord
-2. Paste your webhook URL
-3. Recommended triggers:
-   - **On Import** - notifies when a new episode is downloaded and imported
-   - **On Upgrade** - notifies when a better quality version replaces an existing file
-4. Test and Save
-
-## Bulk Import Warning
-
-If you are about to bulk import an existing media library into Radarr or Sonarr, **disable the Discord connection first**. Otherwise you will get a flood of notifications for every file imported. After the import is complete, re-enable the connection.
-
-To disable temporarily:
-
-1. Settings -> Connect -> click the Discord entry
-2. Uncheck the **Enabled** toggle
-3. Save
-4. Do your bulk import
-5. Re-enable and Save
+- Disable the connection before bulk importing a library or you will get one
+  notification per episode imported
+- Sonarr and Radarr can each point to different channels if you want to separate
+  TV and movie notifications
+- Suggested channel names: #tv-updates and #movie-updates, or a shared #media-updates
+- On Grab fires too early (download queued but not finished) - not recommended

@@ -3,7 +3,7 @@
 TV show management and automation. Sonarr monitors for new episodes, searches indexers via Prowlarr, sends torrents to rdt-client, and imports completed downloads into your media library.
 
 - **Port**: 8989
-- **Runs as**: `sonarr` system user
+- **Runs as**: `media` system user
 - **Install path**: `/opt/Sonarr`
 - **Config/database**: `/var/lib/sonarr`
 - **Media root**: `/mnt/raid/media/Videos/TV Shows`
@@ -11,17 +11,15 @@ TV show management and automation. Sonarr monitors for new episodes, searches in
 ## Prerequisites
 
 - ASP.NET Core runtime 10.0 (see [Radarr prerequisites](radarr.md#system-dependencies) for install steps)
-- The `plex` group must exist (Sonarr is added to it for media library access)
-- The `mediadl` group must exist (for shared download directory access). See [permissions](permissions.md).
+- The `media` user must exist and own the install paths. See [permissions](permissions.md).
 
 ## Install
 
-Create the service user:
+Create the config directory and set ownership:
 
 ```bash
-sudo useradd -r -s /usr/sbin/nologin sonarr
-sudo usermod -aG plex sonarr
-sudo usermod -aG mediadl sonarr
+sudo mkdir -p /var/lib/sonarr
+sudo chown media:media /var/lib/sonarr
 ```
 
 Download and extract Sonarr (replace the version as needed):
@@ -34,42 +32,8 @@ sudo rm -rf /opt/Sonarr
 sudo mkdir -p /opt/Sonarr
 curl -fsSL "$SONARR_URL" -o /tmp/sonarr.tar.gz
 sudo tar -xzf /tmp/sonarr.tar.gz -C /opt/Sonarr --strip-components=1
-sudo chown -R sonarr:sonarr /opt/Sonarr
+sudo chown -R media:media /opt/Sonarr
 rm /tmp/sonarr.tar.gz
-```
-
-Create the config directory:
-
-```bash
-sudo mkdir -p /var/lib/sonarr
-sudo chown sonarr:sonarr /var/lib/sonarr
-```
-
-## Systemd Service
-
-Create `/etc/systemd/system/sonarr.service`:
-
-```ini
-[Unit]
-Description=Sonarr
-After=network.target
-
-[Service]
-User=sonarr
-Group=mediadl
-UMask=0002
-ExecStart=/opt/Sonarr/Sonarr -nobrowser -data=/var/lib/sonarr
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now sonarr
 ```
 
 ## Firewall
@@ -94,38 +58,6 @@ Open `http://localhost:8989` in your browser.
 ### Root Folder
 
 - Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid/media/Videos/TV Shows`
-
-### Quality Profile
-
-- Set **Language** to `English` in each quality profile. This filters at the profile level so a separate custom format for English-only is redundant.
-- Set **Maximum Size** at the indexer level (Settings -> Indexers -> edit indexer -> Maximum Size) rather than per-profile. This applies a global cap across all profiles.
-
-### Custom Formats
-
-#### Bad Sources
-
-Create a custom format to block low-quality sources:
-
-- Settings -> Custom Formats -> Add
-- Name: `Bad Sources`
-- Add conditions (type: Source): `UNKNOWN`, `CAM`, `TELESYNC`, `TELECINE`, `WORKPRINT`
-- Save
-
-In each quality profile, set the score for Bad Sources to `-10000`.
-
-#### Blocked Releases
-
-Create a custom format to block unwanted release groups and foreign-language uploads:
-
-- Settings -> Custom Formats -> Add
-- Name: `Blocked Releases`
-- Add conditions (type: Release Title, use regex):
-  - Cyrillic characters: `[А-Яа-яЁё]`
-  - Known bad groups: `\b(Zamez|Hamster|HDCLUB)\b`
-  - Multi-language indicators (adjust as needed): `\b(MULTI|MULTi)\b`
-- Save
-
-In each quality profile, set the score for Blocked Releases to `-10000`.
 
 ### ClamAV Integration
 
@@ -155,7 +87,7 @@ curl -fsSL "https://github.com/Sonarr/Sonarr/releases/download/v${SONARR_VERSION
 sudo rm -rf /opt/Sonarr
 sudo mkdir -p /opt/Sonarr
 sudo tar -xzf /tmp/sonarr.tar.gz -C /opt/Sonarr --strip-components=1
-sudo chown -R sonarr:sonarr /opt/Sonarr
+sudo chown -R media:media /opt/Sonarr
 rm /tmp/sonarr.tar.gz
 sudo systemctl start sonarr
 ```
@@ -168,17 +100,10 @@ Your configuration in `/var/lib/sonarr` is preserved across updates.
 
 If files are in the downloads folder but Sonarr is not importing them:
 
-1. Check permissions. Sonarr needs read and move access to the download folder. Verify it is in the `mediadl` group:
+1. Check that the `media` user owns the downloads directory:
 
 ```bash
-groups sonarr
-```
-
-If `mediadl` is missing:
-
-```bash
-sudo usermod -aG mediadl sonarr
-sudo systemctl restart sonarr
+ls -la /mnt/raid/media/Downloads/sonarr/
 ```
 
 2. Use Manual Import as a fallback:
@@ -194,3 +119,43 @@ If Sonarr shows `No indexers available` health warnings, Prowlarr sync may not h
 ### Mapped A Show To The Wrong Folder
 
 If Sonarr mapped a show to an existing folder from your pre-existing media library, remove the show from Sonarr without deleting files (do not check the delete files box), then re-add it with the correct path.
+
+## Service file
+
+Copy the service file from the repo and enable it:
+
+```bash
+sudo cp services/sonarr.service /etc/systemd/system/sonarr.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now sonarr
+```
+
+## Quality profiles
+
+### Language
+Set Language to `English` in each quality profile (Settings > Profiles) to filter
+non-English releases.
+
+### Bad Sources custom format
+Go to Settings > Custom Formats > + and create a format called `Bad Sources`.
+Add a Source condition for each of the following, then set the score to `-10000`
+in all quality profiles:
+- UNKNOWN
+- CAM
+- TELESYNC
+- TELECINE
+- WORKPRINT
+
+### Blocked Releases custom format
+Create a custom format called `Blocked Releases` with a Release Title condition
+using the regex `[А-Яа-яЁё]` to catch Cyrillic characters in release names.
+Set the score to `-10000` in all quality profiles.
+
+### Size limits
+Set Maximum Size at the indexer level (Settings > Indexers > edit each indexer)
+rather than per quality profile. This applies a global cap regardless of which
+profile a show uses.
+
+## Notifications
+
+See [notifications](notifications.md) for Discord webhook setup.
