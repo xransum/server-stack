@@ -1,8 +1,9 @@
-# media-stack
+# server-stack
 
-Self-hosted media automation stack on Debian 12 using Real-Debrid.
+Self-hosted server stack on Debian 12. Covers media automation and network
+utilities.
 
-## Stack
+## Media
 
 | Service | Purpose | Port | Docs |
 | --- | --- | --- | --- |
@@ -16,7 +17,7 @@ Self-hosted media automation stack on Debian 12 using Real-Debrid.
 Plex, Overseerr, and Tautulli are assumed to already be installed and are not
 managed by this stack.
 
-## How it works
+### How it works
 
 ```
 Overseerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local download -> Plex
@@ -31,14 +32,14 @@ Overseerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local dow
 7. Radarr/Sonarr detects the completed download, renames and moves it to the media library
 8. Plex picks up the new file automatically
 
-## Requirements
+### Requirements
 
 - Debian 12 (Bookworm)
 - An active Real-Debrid premium subscription
 - Plex, Overseerr, and Tautulli already installed and running
 - sudo access
 
-## Installation
+### Installation
 
 This stack is installed manually. Follow the docs in order:
 
@@ -50,7 +51,7 @@ This stack is installed manually. Follow the docs in order:
 6. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
 7. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
-## File structure
+### File structure
 
 ```
 /mnt/raid/media/
@@ -75,13 +76,13 @@ This stack is installed manually. Follow the docs in order:
     prowlarr/           <- Prowlarr config and database
 ```
 
-## Permissions
+### Permissions
 
 All services run as a single `media` user. Plex and your personal user are added
 to the `media` group for read access to the library. See [permissions](docs/permissions.md)
 for full details.
 
-## Service management
+### Service management
 
 ```bash
 # Check status
@@ -94,7 +95,7 @@ sudo systemctl restart radarr
 sudo journalctl -u radarr -n 50
 ```
 
-## Known issues
+### Known issues
 
 - rdt-client creates a subfolder per download (e.g. Show.S01E01.mkv/Show.S01E01.mkv).
   Running all services as the same media user means Sonarr and Radarr can read these
@@ -103,3 +104,9 @@ sudo journalctl -u radarr -n 50
   [FlareSolverr docs](docs/flaresolverr.md) for details.
 - Sonarr can show No indexers available if Prowlarr sync fails. See
   [Prowlarr troubleshooting](docs/prowlarr.md) for details.
+
+## Network
+
+| Service | Purpose | Docs |
+| --- | --- | --- |
+| DNS Updater | Dynamic DNS updater for DreamHost via systemd timer | [Install & Config](docs/dns-updater.md) |

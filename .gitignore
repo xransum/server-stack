@@ -1,4 +1,60 @@
-*.log
-*.tmp
-*.swp
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+nohup.out
+
+# macOS
 .DS_Store
+
+# Editor
+*.swp
+*.tmp
+
+# Python
+__pycache__/
+*.py[codz]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+.ruff_cache/
+.pdm-python
+.pdm-build/
+__pypackages__/
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+
+# Secrets
+.env
+.envrc

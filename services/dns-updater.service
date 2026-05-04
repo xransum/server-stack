@@ -1,0 +1,12 @@
+# /etc/systemd/system/dns-updater.service
+[Unit]
+Description=DNS Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dns-updater/venv/bin/python3 /opt/dns-updater/dns_updater.py
+WorkingDirectory=/opt/dns-updater
+User=<your-username>
+Group=<your-username>
