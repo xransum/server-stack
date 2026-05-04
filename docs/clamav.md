@@ -21,31 +21,10 @@ sudo systemctl enable clamav-daemon
 
 ## Scan Script
 
-Create `/usr/local/bin/scan-media.sh`:
+Copy the script from this repo and make it executable:
 
 ```bash
-#!/bin/bash
-
-file="$1"
-
-if [ -z "$file" ] || [ ! -e "$file" ]; then
-    exit 0
-fi
-
-clamscan --no-summary --quiet "$file"
-status=$?
-
-if [ "$status" -eq 1 ]; then
-    logger -t clamav "INFECTED FILE DETECTED: $file"
-    rm -f "$file"
-elif [ "$status" -gt 1 ]; then
-    logger -t clamav "ClamAV scan failed for $file with exit code $status"
-fi
-```
-
-Make it executable:
-
-```bash
+sudo cp scripts/scan-media.sh /usr/local/bin/scan-media.sh
 sudo chmod +x /usr/local/bin/scan-media.sh
 ```
 
@@ -60,6 +39,49 @@ Logs are written to syslog and can be viewed with:
 ```bash
 sudo journalctl -t clamav -n 50
 ```
+
+## Discord Notifications
+
+The scan script can post to a Discord channel when it detects or fails to scan
+a file. Notifications are sent via a webhook and require `curl`, which is
+installed on Debian by default.
+
+### Setup
+
+Create the config file from the example:
+
+```bash
+sudo cp scripts/scan-media.conf.example /etc/scan-media.conf
+sudo nano /etc/scan-media.conf
+```
+
+Set your webhook URL:
+
+```bash
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/<ID>/<TOKEN>
+```
+
+To get a webhook URL: Discord server -> Settings -> Integrations -> Webhooks ->
+New Webhook -> Copy Webhook URL.
+
+### What Gets Sent
+
+Infected file detected and deleted:
+
+```
+:biohazard: Malicious file detected and nuked:
+- The Big Lebowski (2014)/The.Big.Lebowski.mkv
+```
+
+Scan error (file kept):
+
+```
+:warning: ClamAV scan error (exit 2) for:
+- The Big Lebowski (2014)/The.Big.Lebowski.mkv
+```
+
+If `/etc/scan-media.conf` does not exist or `DISCORD_WEBHOOK_URL` is unset,
+notifications are silently skipped and the script behaves as normal.
 
 ## Connect To Radarr And Sonarr
 

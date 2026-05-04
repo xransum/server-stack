@@ -1,0 +1,9 @@
+# Discord webhook URL for scan-media.sh notifications.
+# Copy this file to /etc/scan-media.conf and fill in your webhook URL.
+#
+# To get your webhook URL:
+#   Discord server -> Settings -> Integrations -> Webhooks -> New Webhook
+#   Copy the URL -- it will look like:
+#   https://discord.com/api/webhooks/<ID>/<TOKEN>
+
+DISCORD_WEBHOOK_URL=
