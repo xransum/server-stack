@@ -40,15 +40,24 @@ sudo git clone -b latest https://github.com/ManiMatter/decluttarr.git /opt/declu
 sudo chown -R media:media /opt/decluttarr
 ```
 
-Create the virtual environment and install Python dependencies. We do this
-as root because the `media` user has no login shell or `$HOME`, then chown
-the result back to `media` so the systemd service can use it:
+Create the virtual environment and install Python dependencies. We use the
+absolute path `/usr/bin/python3` to avoid picking up any user-level Python
+manager (pyenv, asdf, conda) that might leak through `sudo`. The venv is
+created as root and then handed to `media` so the systemd service can use
+it without depending on any user's shell environment:
 
 ```bash
-sudo python3 -m venv /opt/decluttarr/.venv
+sudo /usr/bin/python3 -m venv /opt/decluttarr/.venv
 sudo /opt/decluttarr/.venv/bin/pip install --upgrade pip
 sudo /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
 sudo chown -R media:media /opt/decluttarr/.venv
+```
+
+Verify the venv is linked to the system Python (not a pyenv/asdf shim):
+
+```bash
+readlink -f /opt/decluttarr/.venv/bin/python
+# Expected: /usr/bin/python3.x  (NOT anything under /home or ~/.pyenv)
 ```
 
 The upstream repo's `config/` directory is not reliably created by `git
