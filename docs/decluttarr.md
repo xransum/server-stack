@@ -108,7 +108,17 @@ jobs:
   remove_failed_downloads:
 
   # Remove downloads that completed but failed to import into the library.
+  # message_patterns matches Sonarr/Radarr's reported import failure reason;
+  # this list is the upstream-recommended default and only acts on known-bad
+  # cases (avoids touching transient permission/network errors).
   remove_failed_imports:
+    message_patterns:
+      - "Not a Custom Format upgrade for existing*"
+      - "Not an upgrade for existing*"
+      - "*Found potentially dangerous file with extension*"
+      - "Invalid video file*"
+      - "No files found are eligible for import*"
+      - "One or more episodes expected in this release were not imported or missing from the release"
 
   # Remove downloads that are stalled (no progress) after max_strikes cycles.
   remove_stalled:
