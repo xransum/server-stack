@@ -40,13 +40,15 @@ sudo git clone -b latest https://github.com/ManiMatter/decluttarr.git /opt/declu
 sudo chown -R media:media /opt/decluttarr
 ```
 
-Create the virtual environment and install Python dependencies as the
-`media` user:
+Create the virtual environment and install Python dependencies. We do this
+as root because the `media` user has no login shell or `$HOME`, then chown
+the result back to `media` so the systemd service can use it:
 
 ```bash
-sudo -u media python3 -m venv /opt/decluttarr/.venv
-sudo -u media /opt/decluttarr/.venv/bin/pip install --upgrade pip
-sudo -u media /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
+sudo python3 -m venv /opt/decluttarr/.venv
+sudo /opt/decluttarr/.venv/bin/pip install --upgrade pip
+sudo /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
+sudo chown -R media:media /opt/decluttarr/.venv
 ```
 
 The upstream repo's `config/` directory is not reliably created by `git
@@ -179,8 +181,9 @@ sudo journalctl -u decluttarr -n 50
 
 ```bash
 sudo systemctl stop decluttarr
-sudo -u media git -C /opt/decluttarr pull
-sudo -u media /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
+sudo git -C /opt/decluttarr pull
+sudo /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
+sudo chown -R media:media /opt/decluttarr
 sudo systemctl start decluttarr
 ```
 
