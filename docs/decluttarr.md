@@ -1,8 +1,8 @@
 # Decluttarr
 
-Queue cleanup for the arr stack. Decluttarr monitors the Sonarr download queue
-on a timer, removes failed and stalled downloads, blocklists the offending
-release in Sonarr, and triggers a new search.
+Queue cleanup for the arr stack. Decluttarr monitors the Sonarr and Radarr
+download queues on a timer, removes failed and stalled downloads, blocklists
+the offending release, and triggers a new search.
 
 This service exists in this stack specifically to work around a Real-Debrid
 edge case: when Real-Debrid rejects a torrent hash as an infringing file,
@@ -20,6 +20,7 @@ independently and cleans these up.
 
 - Python 3, `python3-venv`, and `git`
 - Sonarr running and reachable at `http://localhost:8989`
+- Radarr running and reachable at `http://localhost:7878`
 - rdt-client running and reachable at `http://localhost:6500`
 - The `media` user must exist. See [permissions](permissions.md).
 
@@ -53,8 +54,9 @@ which is where the runtime config below lives.
 
 ## Configuration
 
-Get a Sonarr API key from Sonarr -> Settings -> General -> API Key, and have
-your rdt-client login credentials handy.
+Get a Sonarr API key from Sonarr -> Settings -> General -> API Key and a
+Radarr API key from Radarr -> Settings -> General -> API Key. Also have your
+rdt-client login credentials handy.
 
 Create `/opt/decluttarr/config/config.yaml`:
 
@@ -100,14 +102,10 @@ instances:
       url: http://localhost:8989
       api_key: YOUR_SONARR_API_KEY
 
-  # Radarr is not managed by decluttarr in this stack by default. To enable,
-  # uncomment the block below and fill in the API key from Radarr -> Settings
-  # -> General -> API Key.
-  #
-  # radarr:
-  #   - name: radarr
-  #     url: http://localhost:7878
-  #     api_key: YOUR_RADARR_API_KEY
+  radarr:
+    - name: radarr
+      url: http://localhost:7878
+      api_key: YOUR_RADARR_API_KEY
 ```
 
 ```bash
@@ -117,12 +115,13 @@ sudo chmod 640 /opt/decluttarr/config/config.yaml
 
 ## Required Prowlarr setting
 
-In Prowlarr, go to Settings -> Apps -> Sonarr, click **Show Advanced**, and
-enable **Reject Blocklisted Torrent Hashes While Grabbing**.
+In Prowlarr, go to Settings -> Apps -> **Sonarr**, click **Show Advanced**,
+and enable **Reject Blocklisted Torrent Hashes While Grabbing**. Repeat for
+the **Radarr** entry under the same Apps page.
 
-Without this, Sonarr's blocklist will not prevent the same torrent hash from
-being grabbed again from a different indexer, and decluttarr's blocklist
-action will get undone on the next search.
+Without this, the blocklist will not prevent the same torrent hash from being
+grabbed again from a different indexer, and decluttarr's blocklist action
+will get undone on the next search.
 
 ## Service file
 
@@ -142,9 +141,10 @@ Tail the logs through one full cycle:
 sudo journalctl -u decluttarr -f
 ```
 
-You should see decluttarr successfully connect to both the Sonarr instance and
-the qBittorrent (rdt-client) endpoint, then iterate the queue. With
-`test_run: True`, any actions it would take are logged but not executed.
+You should see decluttarr successfully connect to the Sonarr instance, the
+Radarr instance, and the qBittorrent (rdt-client) endpoint, then iterate
+each queue. With `test_run: True`, any actions it would take are logged but
+not executed.
 
 Once the connections succeed and the intended actions look correct, switch
 `test_run` to `False` in `/opt/decluttarr/config/config.yaml` and restart:
@@ -184,8 +184,8 @@ created on first visit to `http://localhost:6500`, not Real-Debrid credentials.
 ### Same release gets re-grabbed after blocklisting
 
 Confirm the Prowlarr setting above (**Reject Blocklisted Torrent Hashes While
-Grabbing**) is enabled. Without it the blocklist only prevents re-grabs from
-the same indexer.
+Grabbing**) is enabled for both the Sonarr and Radarr app entries. Without
+it the blocklist only prevents re-grabs from the same indexer.
 
 ### Decluttarr never takes action
 

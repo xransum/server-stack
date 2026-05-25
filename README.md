@@ -35,8 +35,8 @@ Overseerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local dow
 
 Decluttarr runs alongside this pipeline. If Real-Debrid rejects a torrent
 (for example as an infringing hash), rdt-client returns a 500 that Sonarr
-mistakes for a transient connection error, leaving the item stuck in the
-queue. Decluttarr detects the stall, blocklists the release in Sonarr, and
+and Radarr mistake for a transient connection error, leaving the item stuck
+in the queue. Decluttarr detects the stall, blocklists the release, and
 re-triggers the search so the pipeline can move on.
 
 ### Requirements

@@ -1,7 +1,7 @@
 [Unit]
 Description=Decluttarr
-After=network.target sonarr.service rdt-client.service
-Wants=sonarr.service rdt-client.service
+After=network.target sonarr.service radarr.service rdt-client.service
+Wants=sonarr.service radarr.service rdt-client.service
 
 [Service]
 User=media
