@@ -1,0 +1,16 @@
+[Unit]
+Description=Decluttarr
+After=network.target sonarr.service rdt-client.service
+Wants=sonarr.service rdt-client.service
+
+[Service]
+User=media
+Group=media
+UMask=0002
+WorkingDirectory=/opt/decluttarr
+ExecStart=/opt/decluttarr/.venv/bin/python /opt/decluttarr/main.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

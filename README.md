@@ -12,6 +12,7 @@ utilities.
 | Prowlarr | Indexer management | 9696 | [Install & Config](docs/prowlarr.md) |
 | rdt-client | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
 | FlareSolverr | Cloudflare bypass proxy | 8191 | [Install & Config](docs/flaresolverr.md) |
+| Decluttarr | Queue cleanup for failed/stalled downloads | - | [Install & Config](docs/decluttarr.md) |
 | ClamAV | Malware scanning | - | [Install & Config](docs/clamav.md) |
 
 Plex, Overseerr, and Tautulli are assumed to already be installed and are not
@@ -32,6 +33,12 @@ Overseerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local dow
 7. Radarr/Sonarr detects the completed download, renames and moves it to the media library
 8. Plex picks up the new file automatically
 
+Decluttarr runs alongside this pipeline. If Real-Debrid rejects a torrent
+(for example as an infringing hash), rdt-client returns a 500 that Sonarr
+mistakes for a transient connection error, leaving the item stuck in the
+queue. Decluttarr detects the stall, blocklists the release in Sonarr, and
+re-triggers the search so the pipeline can move on.
+
 ### Requirements
 
 - Debian 12 (Bookworm)
@@ -48,8 +55,9 @@ This stack is installed manually. Follow the docs in order:
 3. [Radarr](docs/radarr.md) - install the movie manager
 4. [Sonarr](docs/sonarr.md) - install the TV show manager
 5. [Prowlarr](docs/prowlarr.md) - install the indexer manager and connect it to Radarr/Sonarr
-6. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
-7. [ClamAV](docs/clamav.md) - install malware scanning (optional)
+6. [Decluttarr](docs/decluttarr.md) - install queue cleanup for failed/stalled downloads
+7. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
+8. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
 ### File structure
 
@@ -69,6 +77,9 @@ This stack is installed manually. Follow the docs in order:
     Sonarr/             <- Sonarr binaries
     Prowlarr/           <- Prowlarr binaries
     rdt-client/         <- rdt-client binaries
+    decluttarr/         <- Decluttarr source and venv
+        config/
+            config.yaml <- Decluttarr config
 
 /var/lib/
     radarr/             <- Radarr config and database
@@ -86,7 +97,7 @@ for full details.
 
 ```bash
 # Check status
-sudo systemctl status radarr sonarr prowlarr rdt-client
+sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr
 
 # Restart a service
 sudo systemctl restart radarr
