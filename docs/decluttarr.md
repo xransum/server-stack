@@ -49,8 +49,14 @@ sudo -u media /opt/decluttarr/.venv/bin/pip install --upgrade pip
 sudo -u media /opt/decluttarr/.venv/bin/pip install -r /opt/decluttarr/docker/requirements.txt
 ```
 
-The upstream repo ships an empty `config/` directory at `/opt/decluttarr/config`
-which is where the runtime config below lives.
+The upstream repo's `config/` directory is not reliably created by `git
+clone` (git does not track empty directories), so create it explicitly and
+hand it to the `media` user:
+
+```bash
+sudo mkdir -p /opt/decluttarr/config
+sudo chown media:media /opt/decluttarr/config
+```
 
 ## Configuration
 
