@@ -151,7 +151,8 @@ sudo chmod 640 /opt/decluttarr/config/config.yaml
 ## Required Prowlarr setting
 
 In Prowlarr, go to Settings -> Apps -> **Sonarr**, click **Show Advanced**,
-and enable **Reject Blocklisted Torrent Hashes While Grabbing**. Repeat for
+and enable **Sync Reject Blocklisted Torrent Hashes While Grabbing**. Repeat
+for
 the **Radarr** entry under the same Apps page.
 
 Without this, the blocklist will not prevent the same torrent hash from being
@@ -221,7 +222,8 @@ created on first visit to `http://localhost:6500`, not Real-Debrid credentials.
 
 ### Same release gets re-grabbed after blocklisting
 
-Confirm the Prowlarr setting above (**Reject Blocklisted Torrent Hashes While
+Confirm the Prowlarr setting above (**Sync Reject Blocklisted Torrent Hashes
+While
 Grabbing**) is enabled for both the Sonarr and Radarr app entries. Without
 it the blocklist only prevents re-grabs from the same indexer.
 
