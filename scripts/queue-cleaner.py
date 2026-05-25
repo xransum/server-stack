@@ -162,14 +162,44 @@ def process_instance(
     log(f"INFO  [{name}] {len(records)} queue item(s) returned")
 
     now = datetime.now(timezone.utc)
-    acted = 0
+
+    # First pass: filter to matching items and group by downloadId. Sonarr
+    # creates one queue entry per episode for a season-pack torrent, all
+    # sharing the same downloadId. Deleting one with removeFromClient=true
+    # cascades to all siblings, so issuing N DELETEs returns 404s for the
+    # last N-1. Dedupe up front to keep logs clean.
+    matched_by_download: dict[str, dict] = {}
+    skipped_siblings = 0
     for item in records:
         item_id = item.get("id")
         title = item.get("title", "<no title>")
-        matched, reason = matches(item, patterns, min_age_minutes, now)
-        if not matched:
+        ok, reason = matches(item, patterns, min_age_minutes, now)
+        if not ok:
             log(f"DEBUG [{name}] skip id={item_id} title={title!r}: {reason}")
             continue
+        dl_id = item.get("downloadId") or f"__no_download_id__:{item_id}"
+        if dl_id in matched_by_download:
+            skipped_siblings += 1
+            log(
+                f"DEBUG [{name}] dedupe id={item_id} title={title!r}: "
+                f"sibling of id={matched_by_download[dl_id].get('id')} "
+                f"(downloadId={dl_id})"
+            )
+            continue
+        matched_by_download[dl_id] = item
+
+    if skipped_siblings:
+        log(
+            f"INFO  [{name}] deduped {skipped_siblings} sibling queue "
+            f"entr{'y' if skipped_siblings == 1 else 'ies'} "
+            f"sharing a downloadId with another match"
+        )
+
+    acted = 0
+    for item in matched_by_download.values():
+        item_id = item.get("id")
+        title = item.get("title", "<no title>")
+        ok, reason = matches(item, patterns, min_age_minutes, now)
 
         prefix = "DRY   " if dry_run else "ACT   "
         log(
@@ -194,6 +224,14 @@ def process_instance(
         if 200 <= del_status < 300:
             log(f"INFO  [{name}] deleted id={item_id}")
             acted += 1
+        elif del_status == 404:
+            # Sonarr cleaned the entry between our queue fetch and DELETE
+            # (e.g. cascade-removal from a sibling, manual UI action, or a
+            # decluttarr run). Not an error.
+            log(
+                f"INFO  [{name}] id={item_id} already gone (HTTP 404); "
+                f"likely cascade-removed or cleaned by another process"
+            )
         else:
             log(
                 f"ERROR [{name}] DELETE id={item_id} failed: "
