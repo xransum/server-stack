@@ -58,7 +58,15 @@ Get a Sonarr API key from Sonarr -> Settings -> General -> API Key and a
 Radarr API key from Radarr -> Settings -> General -> API Key. Also have your
 rdt-client login credentials handy.
 
-Create `/opt/decluttarr/config/config.yaml`:
+Create `/opt/decluttarr/config/config.yaml` (edit as root since the `media`
+user has no login shell):
+
+```bash
+sudoedit /opt/decluttarr/config/config.yaml
+# or: sudo nano /opt/decluttarr/config/config.yaml
+```
+
+Paste:
 
 ```yaml
 # Run in test mode first. Decluttarr will log what it WOULD do without
