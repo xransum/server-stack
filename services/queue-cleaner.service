@@ -1,0 +1,11 @@
+[Unit]
+Description=Queue cleaner for Sonarr/Radarr (rdt-client 500 workaround)
+After=network-online.target sonarr.service radarr.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=media
+Group=media
+EnvironmentFile=/etc/queue-cleaner.env
+ExecStart=/usr/bin/python3 /opt/queue-cleaner/queue-cleaner.py

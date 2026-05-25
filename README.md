@@ -13,6 +13,7 @@ utilities.
 | rdt-client | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
 | FlareSolverr | Cloudflare bypass proxy | 8191 | [Install & Config](docs/flaresolverr.md) |
 | Decluttarr | Queue cleanup for failed/stalled downloads | - | [Install & Config](docs/decluttarr.md) |
+| queue-cleaner | Sidecar for stuck rdt-client 500 queue items | - | [Install & Config](docs/queue-cleaner.md) |
 | ClamAV | Malware scanning | - | [Install & Config](docs/clamav.md) |
 
 Plex, Overseerr, and Tautulli are assumed to already be installed and are not
@@ -39,6 +40,12 @@ and Radarr mistake for a transient connection error, leaving the item stuck
 in the queue. Decluttarr detects the stall, blocklists the release, and
 re-triggers the search so the pipeline can move on.
 
+queue-cleaner is a small purpose-built sidecar that targets one specific
+variant decluttarr does not catch out of the box: queue items left with
+`status=warning` and `errorMessage="qBittorrent is reporting an error"`.
+It runs every 5 minutes via a systemd timer and deletes + blocklists those
+items. See [queue-cleaner docs](docs/queue-cleaner.md) for the full rationale.
+
 ### Requirements
 
 - Debian 12 (Bookworm)
@@ -56,8 +63,9 @@ This stack is installed manually. Follow the docs in order:
 4. [Sonarr](docs/sonarr.md) - install the TV show manager
 5. [Prowlarr](docs/prowlarr.md) - install the indexer manager and connect it to Radarr/Sonarr
 6. [Decluttarr](docs/decluttarr.md) - install queue cleanup for failed/stalled downloads
-7. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
-8. [ClamAV](docs/clamav.md) - install malware scanning (optional)
+7. [queue-cleaner](docs/queue-cleaner.md) - install the rdt-client 500 sidecar
+8. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
+9. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
 ### File structure
 
@@ -80,6 +88,11 @@ This stack is installed manually. Follow the docs in order:
     decluttarr/         <- Decluttarr source and venv
         config/
             config.yaml <- Decluttarr config
+    queue-cleaner/
+        queue-cleaner.py <- queue-cleaner script
+
+/etc/
+    queue-cleaner.env   <- queue-cleaner API keys and settings (root:root 600)
 
 /var/lib/
     radarr/             <- Radarr config and database
@@ -97,7 +110,7 @@ for full details.
 
 ```bash
 # Check status
-sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr
+sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer
 
 # Restart a service
 sudo systemctl restart radarr

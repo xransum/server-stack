@@ -1,0 +1,11 @@
+[Unit]
+Description=Run queue-cleaner every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=queue-cleaner.service
+
+[Install]
+WantedBy=timers.target

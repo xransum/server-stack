@@ -212,6 +212,21 @@ sudo systemctl start decluttarr
 Your `config/config.yaml` is preserved across updates (it is not tracked by
 the upstream repo).
 
+## Limitations (and what queue-cleaner covers)
+
+Decluttarr's stock jobs match on specific status / errorMessage values:
+
+- `remove_failed_downloads` requires `status == "failed"`.
+- `remove_stalled` requires the literal `errorMessage == "The download is
+  stalled with no connections"`.
+
+The rdt-client 500-on-infringing-hash failure we installed decluttarr for
+actually shows up in Sonarr/Radarr as `status == "warning"` with
+`errorMessage == "qBittorrent is reporting an error"`, which neither job
+matches. That specific case is handled by the
+[queue-cleaner](queue-cleaner.md) sidecar instead. Decluttarr still earns
+its keep for failed imports, true stalls, and strike-based recovery.
+
 ## Troubleshooting
 
 ### Auth failures against rdt-client
