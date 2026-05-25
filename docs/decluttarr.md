@@ -86,51 +86,51 @@ sudoedit /opt/decluttarr/config/config.yaml
 Paste:
 
 ```yaml
-# Run in test mode first. Decluttarr will log what it WOULD do without
-# actually removing or blocklisting anything. Flip to False after verifying
-# behavior in the logs.
-test_run: True
-
 general:
   log_level: INFO
+  # Run in test mode first. Decluttarr will log what it WOULD do without
+  # actually removing or blocklisting anything. Flip to false after verifying
+  # behavior in the logs.
+  test_run: true
   # How often (in minutes) to scan the queue
   timer: 10
 
+job_defaults:
+  max_strikes: 3
+  min_days_between_searches: 7
+  max_concurrent_searches: 3
+
+# Jobs are enabled by including their key. Omit a job to disable it.
+# Slow / unmonitored / orphan jobs are intentionally left out for this stack.
 jobs:
   # Remove downloads that failed to download (the case rdt-client 500s hit).
-  # Blocklists the release in Sonarr and triggers a fresh search.
-  remove_failed_downloads: True
+  # Blocklists the release and triggers a fresh search.
+  remove_failed_downloads:
 
   # Remove downloads that completed but failed to import into the library.
-  remove_failed_imports: True
+  remove_failed_imports:
 
-  # Remove downloads that are stalled (no progress) after the configured
-  # number of strikes.
-  remove_stalled: True
-
-  # Intentionally disabled in this stack. Enable only if you know you want them.
-  remove_slow: False
-  remove_unmonitored: False
-  remove_orphans: False
-
-# rdt-client exposes a qBittorrent-compatible API on port 6500.
-download_clients:
-  qbittorrent:
-    - name: rdt-client
-      url: http://localhost:6500
-      username: YOUR_RDTCLIENT_USERNAME
-      password: YOUR_RDTCLIENT_PASSWORD
+  # Remove downloads that are stalled (no progress) after max_strikes cycles.
+  remove_stalled:
 
 instances:
   sonarr:
-    - name: sonarr
-      url: http://localhost:8989
-      api_key: YOUR_SONARR_API_KEY
+    - base_url: "http://localhost:8989"
+      api_key: "YOUR_SONARR_API_KEY"
 
   radarr:
-    - name: radarr
-      url: http://localhost:7878
-      api_key: YOUR_RADARR_API_KEY
+    - base_url: "http://localhost:7878"
+      api_key: "YOUR_RADARR_API_KEY"
+
+# rdt-client exposes a qBittorrent-compatible API on port 6500.
+# `name` defaults to "qBittorrent", which matches the default name Sonarr and
+# Radarr assign when you add a qBittorrent download client. If you renamed
+# the download client in Sonarr/Radarr, set `name:` here to match.
+download_clients:
+  qbittorrent:
+    - base_url: "http://localhost:6500"
+      username: "YOUR_RDTCLIENT_USERNAME"
+      password: "YOUR_RDTCLIENT_PASSWORD"
 ```
 
 ```bash
@@ -168,13 +168,15 @@ sudo journalctl -u decluttarr -f
 
 You should see decluttarr successfully connect to the Sonarr instance, the
 Radarr instance, and the qBittorrent (rdt-client) endpoint, then iterate
-each queue. With `test_run: True`, any actions it would take are logged but
+each queue. With `test_run: true`, any actions it would take are logged but
 not executed.
 
 Once the connections succeed and the intended actions look correct, switch
-`test_run` to `False` in `/opt/decluttarr/config/config.yaml` and restart:
+`test_run` to `false` under `general:` in `/opt/decluttarr/config/config.yaml`
+and restart:
 
 ```bash
+sudo sed -i 's/^  test_run: true/  test_run: false/' /opt/decluttarr/config/config.yaml
 sudo systemctl restart decluttarr
 ```
 
@@ -216,5 +218,6 @@ it the blocklist only prevents re-grabs from the same indexer.
 ### Decluttarr never takes action
 
 If the logs show queue items being inspected but nothing is ever removed,
-check that `test_run` is set to `False` in `config.yaml` and the service has
+check that `test_run` is set to `false` under `general:` in `config.yaml` and
+the service has
 been restarted.
