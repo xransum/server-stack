@@ -1,0 +1,205 @@
+# Docker Compose — gameservers-vm stack
+#
+# Target: gameservers-vm on Proxmox compute server (separate VM from media-vm).
+# Status: UNTESTED — awaiting lab hardware.
+#
+# This stack runs independently of docker-compose.yml (different VM).
+# Start specific game servers on demand via profiles:
+#
+#   docker compose -f docker-compose.gameservers.yml --profile minecraft up -d
+#   docker compose -f docker-compose.gameservers.yml --profile valheim up -d
+#
+# World saves and persistent data live on NAS NFS mount.
+# Add to /etc/fstab on gameservers-vm:
+#   nas-ip:/mnt/dev/gameservers  /mnt/gameservers  nfs  rw,sync,hard,intr  0 0
+#
+# Archive workflow:
+#   1. Stop container: docker compose ... stop <service>
+#   2. On NAS: zfs snapshot pool/dev/gameservers/<game>@<name>
+#   3. Container can be removed — world is safe on NAS
+#   4. Restore: start container again (same NFS mount path, same data)
+#
+# Per-game resource limits (deploy.resources.limits) are TODO — fill in
+# when standing up each game server. Starting estimates noted per service.
+
+name: gameservers
+
+x-restart: &restart-policy
+  restart: unless-stopped
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Management UI (always-on, no profile — manages all game servers)
+  # ---------------------------------------------------------------------------
+
+  pterodactyl-panel:
+    <<: *restart-policy
+    # Pterodactyl has a panel + wings (daemon) architecture.
+    # Panel is the web UI; Wings runs on the same host and manages containers.
+    # See https://pterodactyl.io/panel/1.0/getting_started.html
+    # Full setup is more involved than a single docker-compose service —
+    # leaving as a reference placeholder. Consider Pelican (Pterodactyl fork
+    # with simpler Docker setup) as an alternative.
+    image: ghcr.io/pterodactyl/panel:latest
+    container_name: pterodactyl-panel
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - pterodactyl-panel-config:/app/var
+      - pterodactyl-panel-logs:/app/storage/logs
+    environment:
+      APP_URL: http://localhost   # update with actual subdomain when reverse proxy is configured
+      APP_TIMEZONE: America/New_York
+      DB_PASSWORD: ${PTERODACTYL_DB_PASSWORD}
+      HASHIDS_SALT: ${PTERODACTYL_HASHIDS_SALT}
+    # TODO: requires a MySQL/MariaDB container and a Redis container alongside
+    # this service. See Pterodactyl docs for full compose setup.
+
+  # ---------------------------------------------------------------------------
+  # Minecraft Java — profile: minecraft
+  # ---------------------------------------------------------------------------
+
+  minecraft-java:
+    <<: *restart-policy
+    image: itzg/minecraft-server:latest
+    profiles: [minecraft]
+    container_name: minecraft-java
+    environment:
+      EULA: "TRUE"
+      TYPE: PAPER             # PaperMC — best performance. Change to FORGE/FABRIC for modded.
+      VERSION: LATEST
+      MEMORY: 8G              # TODO: adjust per modpack. Vanilla: 4G, heavy modpack: 12-16G
+      ONLINE_MODE: "true"
+      MOTD: "Home Server"
+      TZ: America/New_York
+    volumes:
+      - /mnt/gameservers/minecraft-java:/data
+    ports:
+      - "25565:25565"
+    # TODO: resource limits — set once you know your modpack requirements
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "4"
+    #       memory: 10G
+
+  # ---------------------------------------------------------------------------
+  # Minecraft Bedrock — profile: minecraft-bedrock
+  # ---------------------------------------------------------------------------
+
+  minecraft-bedrock:
+    <<: *restart-policy
+    image: itzg/minecraft-bedrock-server:latest
+    profiles: [minecraft-bedrock]
+    container_name: minecraft-bedrock
+    environment:
+      EULA: "TRUE"
+      TZ: America/New_York
+    volumes:
+      - /mnt/gameservers/minecraft-bedrock:/data
+    ports:
+      - "19132:19132/udp"
+    # TODO: resource limits
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "2"
+    #       memory: 4G
+
+  # ---------------------------------------------------------------------------
+  # Valheim — profile: valheim
+  # ---------------------------------------------------------------------------
+
+  valheim:
+    <<: *restart-policy
+    image: lloesche/valheim-server:latest
+    profiles: [valheim]
+    container_name: valheim
+    cap_add:
+      - SYS_NICE
+    environment:
+      SERVER_NAME: "Home Server"
+      WORLD_NAME: ${VALHEIM_WORLD_NAME:-Dedicated}
+      SERVER_PASS: ${VALHEIM_SERVER_PASS}
+      TZ: America/New_York
+      BACKUPS: "false"   # Backups handled by ZFS snapshot on NAS
+    volumes:
+      - /mnt/gameservers/valheim/config:/config
+      - /mnt/gameservers/valheim/data:/opt/valheim
+    ports:
+      - "2456-2457:2456-2457/udp"
+    # TODO: resource limits — Valheim dedicated ~4-6GB RAM
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "4"
+    #       memory: 8G
+
+  # ---------------------------------------------------------------------------
+  # Palworld — profile: palworld
+  # ---------------------------------------------------------------------------
+
+  palworld:
+    <<: *restart-policy
+    image: thijsvanloef/palworld-server-docker:latest
+    profiles: [palworld]
+    container_name: palworld
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      PORT: "8211"
+      PLAYERS: "16"
+      MULTITHREADING: "true"
+      COMMUNITY: "false"
+      SERVER_NAME: "Home Server"
+      SERVER_PASSWORD: ${PALWORLD_SERVER_PASSWORD:-}
+      TZ: America/New_York
+    volumes:
+      - /mnt/gameservers/palworld:/palworld/Pal/Saved
+    ports:
+      - "8211:8211/udp"
+      - "27015:27015/udp"
+    # TODO: resource limits — Palworld dedicated ~8-16GB RAM under load
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "8"
+    #       memory: 16G
+
+  # ---------------------------------------------------------------------------
+  # CS2 / Source engine games — profile: cs2
+  # ---------------------------------------------------------------------------
+
+  cs2:
+    <<: *restart-policy
+    image: joedwards32/cs2:latest
+    profiles: [cs2]
+    container_name: cs2
+    environment:
+      SRCDS_TOKEN: ${CS2_SRCDS_TOKEN}   # Get from https://steamcommunity.com/dev/managegameservers
+      CS2_SERVERNAME: "Home Server"
+      CS2_CHEATS: "0"
+      CS2_PORT: "27015"
+      CS2_MAXPLAYERS: "10"
+      CS2_LAN: "0"
+      TZ: America/New_York
+    volumes:
+      - /mnt/gameservers/cs2:/home/steam/cs2-dedicated
+    ports:
+      - "27015:27015/tcp"
+      - "27015:27015/udp"
+    # TODO: resource limits — CS2 dedicated ~2-4GB RAM
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "4"
+    #       memory: 6G
+
+# ---------------------------------------------------------------------------
+# Named volumes (panel config/DB only — game data lives on NAS NFS)
+# ---------------------------------------------------------------------------
+volumes:
+  pterodactyl-panel-config:
+  pterodactyl-panel-logs:

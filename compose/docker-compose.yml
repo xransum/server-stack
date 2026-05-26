@@ -1,0 +1,311 @@
+# Docker Compose — media-vm stack
+#
+# Target: media-vm on Proxmox compute server (Debian 12 + Docker).
+# Status: UNTESTED — awaiting lab hardware. Native systemd on serverhub
+#         is current production. See docs/migration.md for cutover plan.
+#
+# Usage:
+#   docker compose --profile media up -d
+#   docker compose --profile media --profile indexers --profile cloudflare-bypass up -d
+#   docker compose --profile proxy up -d
+#
+# Profiles:
+#   media              Plex, Tautulli, Overseerr
+#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner
+#   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
+#   proxy              Reverse proxy (TBD) + Cloudflare Tunnel
+#   s3                 S3-compatible object storage (TBD)
+#   infra              dns-updater (deprecated — CF Tunnel replaces this)
+#
+# NFS mounts (add to /etc/fstab on media-vm before starting):
+#   nas-ip:/mnt/media  /mnt/media  nfs  rw,sync,hard,intr,rsize=131072,wsize=131072,noatime  0 0
+#   nas-ip:/mnt/s3     /mnt/s3     nfs  rw,sync,hard,intr  0 0
+#
+# CRITICAL: downloads and media must be on the same NFS mount so Sonarr/Radarr
+#           can hardlink on import instead of copy. Do not split them.
+#
+# See docs/storage.md, docs/proxmox-compute.md, docs/migration.md.
+
+name: server-stack
+
+x-restart: &restart-policy
+  restart: unless-stopped
+
+x-media-env: &puid-pgid
+  PUID: "1000"
+  PGID: "1000"
+  TZ: America/New_York
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MEDIA profile
+  # ---------------------------------------------------------------------------
+
+  plex:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/plex:latest
+    profiles: [media]
+    container_name: plex
+    network_mode: host   # Plex requires host networking for local device discovery
+    environment:
+      <<: *puid-pgid
+      VERSION: docker
+      PLEX_CLAIM: ${PLEX_CLAIM:-}   # https://www.plex.tv/claim — optional, only needed first run
+    volumes:
+      - plex-config:/config
+      - /mnt/media:/mnt/media:ro
+    # NVIDIA GPU passthrough for NVENC hardware transcoding (Plex Pass required)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  tautulli:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/tautulli:latest
+    profiles: [media]
+    container_name: tautulli
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - tautulli-config:/config
+    ports:
+      - "8181:8181"
+
+  overseerr:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/overseerr:latest
+    profiles: [media]
+    container_name: overseerr
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - overseerr-config:/config
+    ports:
+      - "5055:5055"
+
+  # ---------------------------------------------------------------------------
+  # INDEXERS profile
+  # ---------------------------------------------------------------------------
+
+  sonarr:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/sonarr:latest
+    profiles: [indexers]
+    container_name: sonarr
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - sonarr-config:/config
+      # IMPORTANT: mount the full /mnt/media so hardlinks work between
+      # downloads/complete and tv/ — they must be on the same filesystem.
+      - /mnt/media:/mnt/media
+    ports:
+      - "8989:8989"
+
+  radarr:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/radarr:latest
+    profiles: [indexers]
+    container_name: radarr
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - radarr-config:/config
+      - /mnt/media:/mnt/media
+    ports:
+      - "7878:7878"
+
+  prowlarr:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/prowlarr:latest
+    profiles: [indexers]
+    container_name: prowlarr
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - prowlarr-config:/config
+      # Custom Cardigann definitions (byparr-proxy indexers)
+      - ./custom-definitions:/config/Definitions/Custom:ro
+    ports:
+      - "9696:9696"
+
+  rdt-client:
+    <<: *restart-policy
+    image: rogerfar/rdtclient:latest
+    profiles: [indexers]
+    container_name: rdt-client
+    environment:
+      <<: *puid-pgid
+    volumes:
+      - rdt-client-config:/data/db
+      - /mnt/media/downloads:/mnt/media/downloads
+    ports:
+      - "6500:6500"
+
+  queue-cleaner:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/queue-cleaner/Dockerfile
+    image: server-stack/queue-cleaner:local
+    profiles: [indexers]
+    container_name: queue-cleaner
+    env_file:
+      - ${QUEUE_CLEANER_ENV:-./queue-cleaner.env}
+    # queue-cleaner is timer-driven; run it every 5 minutes via restart + sleep
+    # Alternative: replace with a proper cron container or systemd timer on host
+    entrypoint: ["sh", "-c", "while true; do python -u /app/queue-cleaner.py; sleep 300; done"]
+    depends_on:
+      - sonarr
+      - radarr
+
+  # ---------------------------------------------------------------------------
+  # CLOUDFLARE-BYPASS profile
+  # ---------------------------------------------------------------------------
+
+  byparr:
+    <<: *restart-policy
+    image: ghcr.io/thephaseless/byparr:latest
+    profiles: [cloudflare-bypass]
+    container_name: byparr
+    environment:
+      TZ: America/New_York
+    ports:
+      - "8192:8191"   # byparr listens on 8191 internally; expose as 8192 to match native install
+
+  byparr-unwrap:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/byparr-unwrap/Dockerfile
+    image: server-stack/byparr-unwrap:local
+    profiles: [cloudflare-bypass]
+    container_name: byparr-unwrap
+    environment:
+      PORT: "8193"
+      LOG_LEVEL: INFO
+      BYPARR: http://byparr:8191/v1
+    ports:
+      - "8193:8193"
+    depends_on:
+      - byparr
+
+  byparr-proxy-1337x:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/byparr-proxy/Dockerfile
+    image: server-stack/byparr-proxy:local
+    profiles: [cloudflare-bypass]
+    container_name: byparr-proxy-1337x
+    environment:
+      UPSTREAM: https://1337x.to
+      BYPARR: http://byparr:8191/v1   # HTML — no unwrap sidecar needed
+      PORT: "8881"
+      TIMEOUT_MS: "120000"
+      LOG_LEVEL: INFO
+      CACHE_TTL_S: "3600"
+      STUB_CAT_PATHS: "true"
+    ports:
+      - "8881:8881"
+    depends_on:
+      - byparr
+
+  byparr-proxy-apibay:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/byparr-proxy/Dockerfile
+    image: server-stack/byparr-proxy:local
+    profiles: [cloudflare-bypass]
+    container_name: byparr-proxy-apibay
+    environment:
+      UPSTREAM: https://apibay.org
+      BYPARR: http://byparr-unwrap:8193/v1   # JSON — route via unwrap sidecar
+      PORT: "8882"
+      TIMEOUT_MS: "120000"
+      LOG_LEVEL: INFO
+      CACHE_TTL_S: "300"
+      STUB_CAT_PATHS: "true"
+    ports:
+      - "8882:8882"
+    depends_on:
+      - byparr-unwrap
+
+  # ---------------------------------------------------------------------------
+  # PROXY profile
+  # ---------------------------------------------------------------------------
+  # Reverse proxy choice is an open decision (Caddy / Nginx Proxy Manager /
+  # Traefik / nginx). Placeholder block below — fill in at lab time.
+  # See docs/proxmox-compute.md open decisions.
+  #
+  # reverse-proxy:
+  #   <<: *restart-policy
+  #   image: <chosen-image>
+  #   profiles: [proxy]
+  #   container_name: reverse-proxy
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - reverse-proxy-config:/config
+
+  cloudflared:
+    <<: *restart-policy
+    image: cloudflare/cloudflared:latest
+    profiles: [proxy]
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  # ---------------------------------------------------------------------------
+  # S3 profile
+  # ---------------------------------------------------------------------------
+  # S3 service choice is an open decision (Garage / MinIO / Nextcloud).
+  # Placeholder block below — fill in at lab time.
+  # See docs/proxmox-compute.md open decisions.
+  #
+  # s3:
+  #   <<: *restart-policy
+  #   image: <chosen-image>
+  #   profiles: [s3]
+  #   container_name: s3
+  #   volumes:
+  #     - /mnt/s3:/data
+
+  # ---------------------------------------------------------------------------
+  # INFRA profile (deprecated)
+  # ---------------------------------------------------------------------------
+
+  dns-updater:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/dns-updater/Dockerfile
+    image: server-stack/dns-updater:local
+    profiles: [infra]
+    container_name: dns-updater
+    # DEPRECATED: Cloudflare Tunnel (cloudflared, proxy profile) replaces this
+    # service entirely. dns-updater kept here for reference and fallback only.
+    # If CF Tunnel is running, do not start this profile.
+    env_file:
+      - ${DNS_UPDATER_ENV:-./dns-updater.env}
+
+# ---------------------------------------------------------------------------
+# Named volumes (app config + databases — local to media-vm, NOT on NFS)
+# SQLite over NFS has locking issues. Keep config/DB on local VM disk.
+# ---------------------------------------------------------------------------
+volumes:
+  plex-config:
+  tautulli-config:
+  overseerr-config:
+  sonarr-config:
+  radarr-config:
+  prowlarr-config:
+  rdt-client-config:
