@@ -30,12 +30,14 @@ Configuration via env vars:
 
 from __future__ import annotations
 
+import gzip
 import html
 import json
 import logging
 import os
 import re
 import sys
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
@@ -48,8 +50,8 @@ UPSTREAM_URL = os.environ.get("UNWRAP_UPSTREAM_URL", "http://127.0.0.1:8192").rs
 TIMEOUT = int(os.environ.get("UNWRAP_TIMEOUT", "300"))
 LOG_LEVEL = os.environ.get("UNWRAP_LOG_LEVEL", "INFO").upper()
 
-# Headers we must NOT forward back to the client because we may rewrite the
-# body length / encoding when we unwrap.
+# Headers we always strip from the upstream response; we recompute
+# Content-Length ourselves, and Transfer-Encoding is hop-by-hop.
 HOP_BY_HOP = {
     "connection",
     "keep-alive",
@@ -60,7 +62,6 @@ HOP_BY_HOP = {
     "transfer-encoding",
     "upgrade",
     "content-length",
-    "content-encoding",  # upstream may gzip; we always return identity
 }
 
 # Signature for the Firefox plaintext viewer wrapper. Camoufox emits it for
@@ -89,25 +90,52 @@ def maybe_unwrap(response_text: str) -> tuple[str, bool]:
     return html.unescape(inner), True
 
 
-def rewrite_payload(raw: bytes) -> bytes:
-    """Parse the upstream JSON, unwrap solution.response if needed."""
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        # Not JSON. Nothing for us to do; return as-is.
+def _decode_body(raw: bytes, encoding: str | None) -> bytes | None:
+    """Return decoded bytes, or None if we can't decode."""
+    if not encoding or encoding.lower() == "identity":
         return raw
+    enc = encoding.lower().strip()
+    try:
+        if enc == "gzip":
+            return gzip.decompress(raw)
+        if enc == "deflate":
+            try:
+                return zlib.decompress(raw)
+            except zlib.error:
+                return zlib.decompress(raw, -zlib.MAX_WBITS)
+    except (OSError, zlib.error):
+        return None
+    # br / zstd / unknown: don't try.
+    return None
+
+
+def rewrite_payload(raw: bytes, content_encoding: str | None) -> tuple[bytes, bool]:
+    """Parse the upstream JSON, unwrap solution.response if needed.
+
+    Returns (body, rewritten). When rewritten is True the caller must drop
+    Content-Encoding because we return identity bytes.
+    """
+    decoded = _decode_body(raw, content_encoding)
+    if decoded is None:
+        # Compressed with something we don't support; pass through untouched.
+        return raw, False
+
+    try:
+        payload = json.loads(decoded.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return raw, False
 
     solution = payload.get("solution") if isinstance(payload, dict) else None
     if not isinstance(solution, dict):
-        return raw
+        return raw, False
 
     response = solution.get("response")
     if not isinstance(response, str):
-        return raw
+        return raw, False
 
     unwrapped, did = maybe_unwrap(response)
     if not did:
-        return raw
+        return raw, False
 
     solution["response"] = unwrapped
     log.info(
@@ -116,7 +144,15 @@ def rewrite_payload(raw: bytes) -> bytes:
         len(response),
         len(unwrapped),
     )
-    return json.dumps(payload).encode("utf-8")
+    return json.dumps(payload).encode("utf-8"), True
+
+
+def _header(headers: list[tuple[str, str]], name: str) -> str | None:
+    name_l = name.lower()
+    for k, v in headers:
+        if k.lower() == name_l:
+            return v
+    return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -157,17 +193,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(500, f"Proxy error: {e}")
             return
 
-        new_body = rewrite_payload(resp_body)
+        body_out, rewritten = rewrite_payload(
+            resp_body, _header(resp_headers, "content-encoding")
+        )
 
         self.send_response(status)
         for k, v in resp_headers:
-            if k.lower() in HOP_BY_HOP:
+            kl = k.lower()
+            if kl in HOP_BY_HOP:
+                continue
+            if rewritten and kl == "content-encoding":
+                # We returned identity bytes; drop the upstream encoding header.
                 continue
             self.send_header(k, v)
-        self.send_header("Content-Length", str(len(new_body)))
+        self.send_header("Content-Length", str(len(body_out)))
         self.end_headers()
-        if new_body:
-            self.wfile.write(new_body)
+        if body_out:
+            self.wfile.write(body_out)
 
     def do_GET(self) -> None:  # noqa: N802
         self._proxy("GET")
