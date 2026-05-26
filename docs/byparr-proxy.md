@@ -159,17 +159,30 @@ You should see something like
 
 Each upstream gets its own instance + env file + Cardigann YAML, on a
 unique local port. Suggested port allocation: `8881` for 1337x, `8882`
-for the next site, and so on, leaving plenty of room before colliding
-with anything else in this stack.
+for apibay, and so on. The shipped `definitions/apibay-byparr.yml`
+already wires up ThePirateBay through `byparr-proxy@apibay`.
 
-For example to add YTS:
+### JSON / RSS indexers need byparr-unwrap
 
-1. Create `/etc/byparr-proxy/yts.env` based on the 1337x file:
+If the upstream returns JSON, RSS, or any other non-HTML body (apibay,
+some RSS-only trackers), the byparr-proxy instance must point at the
+[byparr-unwrap](byparr-unwrap.md) sidecar on `:8193` instead of Byparr
+directly on `:8192`. Byparr serves non-HTML bodies wrapped in Firefox's
+plaintext-viewer HTML; the sidecar strips that. For HTML indexers like
+1337x, skip the sidecar (extra hop, no benefit).
+
+The shipped `scripts/byparr-proxy.env.example` defaults to
+`BYPARR=http://127.0.0.1:8192/v1` (HTML path). For a JSON instance, set
+`BYPARR=http://127.0.0.1:8193/v1` in that instance's env file.
+
+### Example: add YTS (HTML)
+
+1. Create `/etc/byparr-proxy/yts.env`:
 
    ```ini
    UPSTREAM=https://yts.mx
    BYPARR=http://127.0.0.1:8192/v1
-   PORT=8882
+   PORT=8883
    TIMEOUT_MS=60000
    LOG_LEVEL=INFO
    CACHE_TTL_S=3600
@@ -177,13 +190,14 @@ For example to add YTS:
    ```
 
 2. Grab the upstream Cardigann YAML for YTS from
-   [Prowlarr/Indexers](https://github.com/Prowlarr/Indexers), make two
+   [Prowlarr/Indexers](https://github.com/Prowlarr/Indexers), make these
    edits:
    - Change `id:` to a unique value (e.g. `yts-byparr`)
    - Change `name:` to something distinguishable (e.g. `YTS (via Byparr)`)
-   - Replace the `links:` block with `- http://127.0.0.1:8882/`
+   - Replace the `links:` block with `- http://127.0.0.1:8883/`
 
-3. Copy it into `/var/lib/prowlarr/Definitions/Custom/yts-byparr.yml`.
+3. Copy it into `/var/lib/prowlarr/Definitions/Custom/yts-byparr.yml`,
+   `chown prowlarr:prowlarr`.
 
 4. `sudo systemctl enable --now byparr-proxy@yts && sudo systemctl restart prowlarr`
 
@@ -197,20 +211,24 @@ All knobs are environment variables consumed via `EnvironmentFile=` in
 | Variable          | Default                       | Purpose                                                  |
 | ----------------- | ----------------------------- | -------------------------------------------------------- |
 | `UPSTREAM`        | `https://1337x.to`            | Indexer base URL the proxy fetches from. No trailing slash. |
-| `BYPARR`          | `http://127.0.0.1:8192/v1`    | Byparr's `/v1` endpoint. We deliberately skip the byparr-unwrap sidecar on 8193 — indexer pages are HTML so the wrapper bug does not apply, and the extra hop wastes a Cloudflare solve. |
+| `BYPARR`          | `http://127.0.0.1:8192/v1`    | Byparr's `/v1` endpoint. For HTML indexers, talk to Byparr directly. For JSON / RSS / non-HTML indexers, point at the [byparr-unwrap](byparr-unwrap.md) sidecar on `:8193` instead so Firefox's plaintext-viewer wrapper gets stripped. |
 | `TIMEOUT_MS`      | `120000`                      | Per-request timeout passed to Byparr.                    |
 | `PORT`            | `8888`                        | Local listen port. Pick a unique one per instance.       |
 | `LOG_LEVEL`       | `INFO`                        | `DEBUG` logs every request including hits and stubs.     |
 | `CACHE_TTL_S`     | `3600`                        | In-memory cache TTL for successful responses. Empty result pages are not cached. `0` disables. |
 | `STUB_CAT_PATHS`  | `true`                        | Short-circuit `/cat/...` (health-test endpoints) with a synthetic page instead of routing to Byparr. Set `false` if you want Prowlarr to actually browse categories. |
 
-## Why not point at byparr-unwrap (8193) instead of byparr (8192)?
+## Why not always point at byparr-unwrap (8193)?
 
-The byparr-unwrap sidecar exists to strip Firefox's plaintext-viewer
-HTML from **non-HTML** Byparr responses (JSON, RSS, PDF). The pages
-byparr-proxy fetches from indexer sites are always HTML, so the wrapper
-bug never fires on this traffic. Going through the sidecar would add a
-hop without doing any work. Talk to Byparr directly.
+For **HTML** indexers (1337x, YTS, most trackers) the Firefox
+plaintext-viewer wrapper never fires because the response is already
+HTML. The sidecar would just pass the bytes through, adding a hop for no
+benefit. Skip it.
+
+For **JSON / RSS** indexers (apibay/ThePirateBay, RSS-only feeds) the
+wrapper *always* fires and the sidecar is required. Point that
+instance's `BYPARR=` at `http://127.0.0.1:8193/v1`. See the shipped
+apibay env example.
 
 ## Service management
 

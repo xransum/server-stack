@@ -1,14 +1,13 @@
 # byparr-unwrap
 
-> **Disabled by default in this stack.** This sidecar is only needed if
-> you wire Byparr in as a Prowlarr indexer proxy (the
-> Settings -> Indexer Proxies entry). In the default setup, Turnstile
-> indexers go through [byparr-proxy](byparr-proxy.md) as plain HTTP Base
-> URLs instead, which fetches HTML — the Firefox-plaintext-viewer
-> wrapper bug this sidecar fixes only affects JSON / RSS / PDF responses
-> and never fires on the byparr-proxy path. Keep this doc as a reference
-> for when (if) a future indexer needs the classic Prowlarr indexer-proxy
-> wiring.
+> **Required when any byparr-proxy instance fronts a JSON / RSS / PDF
+> indexer** (e.g. `apibay-byparr`, since apibay.org returns JSON). The
+> Firefox-plaintext-viewer wrapper bug this sidecar fixes does not fire
+> on HTML indexer pages (1337x, etc.), so the 1337x byparr-proxy instance
+> talks to Byparr directly on :8192. JSON-returning byparr-proxy instances
+> point their `BYPARR=` at this sidecar on :8193 instead, which transparently
+> unwraps before returning. If you only run HTML indexers through
+> byparr-proxy, this sidecar can be disabled.
 
 Sidecar HTTP proxy that fixes a known [Byparr](byparr.md) bug where
 non-HTML responses (JSON, XML, plain text, PDF) come back wrapped in

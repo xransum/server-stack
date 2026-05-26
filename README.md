@@ -13,7 +13,7 @@ utilities.
 | rdt-client | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
 | FlareSolverr | Cloudflare bypass proxy (Chromium, deprecated in favor of Byparr; install only if needed) | 8191 | [Install & Config](docs/flaresolverr.md) |
 | Byparr | Cloudflare bypass engine (Firefox/Camoufox) | 8192 | [Install & Config](docs/byparr.md) |
-| byparr-unwrap | Sidecar that strips Byparr's Firefox plaintext-viewer wrapper from JSON/XML responses (disabled by default; only needed if wiring Byparr as a Prowlarr indexer proxy) | 8193 | [Install & Config](docs/byparr-unwrap.md) |
+| byparr-unwrap | Sidecar that strips Byparr's Firefox plaintext-viewer wrapper from JSON/XML responses (required when any byparr-proxy instance fronts a JSON/RSS indexer such as apibay) | 8193 | [Install & Config](docs/byparr-unwrap.md) |
 | byparr-proxy | HTTP passthrough fronting Cloudflare-Turnstile indexers (1337x, apibay) so Prowlarr never triggers its broken cookie-replay path | 8881+ | [Install & Config](docs/byparr-proxy.md) |
 | Decluttarr | Queue cleanup for failed/stalled downloads | - | [Install & Config](docs/decluttarr.md) |
 | queue-cleaner | Sidecar for stuck rdt-client 500 queue items | - | [Install & Config](docs/queue-cleaner.md) |
@@ -69,8 +69,8 @@ This stack is installed manually. Follow the docs in order:
 7. [queue-cleaner](docs/queue-cleaner.md) - install the rdt-client 500 sidecar
 8. [FlareSolverr](docs/flaresolverr.md) - optional, deprecated in this stack (kept as reference for the Chromium bypass path; only install if you have a specific classic-CF indexer that needs it)
 9. [Byparr](docs/byparr.md) - install the Firefox-based Cloudflare bypass engine (required if you need any Turnstile-protected indexer)
-10. [byparr-unwrap](docs/byparr-unwrap.md) - optional sidecar, install only if wiring Byparr in as a Prowlarr indexer proxy (most setups do not need this)
-11. [byparr-proxy](docs/byparr-proxy.md) - install one instance per Turnstile-protected indexer (1337x, apibay, etc.)
+10. [byparr-unwrap](docs/byparr-unwrap.md) - sidecar required if any byparr-proxy instance fronts a JSON / RSS indexer (e.g. the shipped apibay instance). Skip if only running HTML indexers like 1337x.
+11. [byparr-proxy](docs/byparr-proxy.md) - install one instance per Turnstile-protected indexer (1337x, apibay, etc.); shipped definitions cover both
 12. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
 ### File structure
