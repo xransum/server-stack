@@ -4,8 +4,15 @@
 # Forked from Prowlarr/Indexers thepiratebay.yml (id: thepiratebay).
 # Changes from upstream:
 #   - id/name renamed so both can coexist in Prowlarr
-#   - `apiurl` default points at the local byparr-proxy instance (127.0.0.1:8882)
-#   - search path template uses http:// (byparr-proxy is plain HTTP) instead of https://
+#   - search path host hardcoded to the local byparr-proxy URL
+#     (http://127.0.0.1:8882). The upstream uses a {{ .Config.apiurl }}
+#     template var, but Prowlarr's Cardigann implementation URL-encodes
+#     every templated value in the search path, which mangles the `:`
+#     in `host:port` into `%3A` and trips .NET's Uri parser with
+#     "Invalid URI: The hostname could not be parsed." See
+#     src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannRequestGenerator.cs
+#     where ApplyGoTemplateText() is called with WebUtility.UrlEncode as
+#     the modifier. Hardcoding the URL bypasses that encoder for the host part.
 #   - `links` keeps a public TPB mirror so Cardigann's {{ .Config.sitelink }}
 #     produces human-clickable details URLs
 #
@@ -97,10 +104,10 @@ caps:
     book-search: [q]
 
 settings:
-  - name: apiurl
+  - name: info_apiurl
+    type: info
     label: API URL (byparr-proxy)
-    type: text
-    default: 127.0.0.1:8882
+    default: "This indexer is hardcoded to call <b>http://127.0.0.1:8882/</b> (the byparr-proxy@apibay instance). To change it, edit the <code>search.paths[0].path</code> in <code>/var/lib/prowlarr/Definitions/Custom/apibay-byparr.yml</code>. Templating a host:port here doesn't work because Prowlarr's Cardigann URL-encodes substituted values and mangles the <code>:</code>."
   - name: uploader
     type: text
     label: Filter by Uploader
@@ -111,7 +118,7 @@ settings:
 
 search:
   paths:
-    - path: "http://{{ .Config.apiurl }}/{{ if .Keywords }}q.php?q={{ .Keywords }}&cat={{ join .Categories \",\" }}{{ else }}precompiled/data_top100_recent.json{{ end }}"
+    - path: "http://127.0.0.1:8882/{{ if .Keywords }}q.php?q={{ .Keywords }}&cat={{ join .Categories \",\" }}{{ else }}precompiled/data_top100_recent.json{{ end }}"
       response:
         type: json
 

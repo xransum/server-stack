@@ -162,6 +162,25 @@ unique local port. Suggested port allocation: `8881` for 1337x, `8882`
 for apibay, and so on. The shipped `definitions/apibay-byparr.yml`
 already wires up ThePirateBay through `byparr-proxy@apibay`.
 
+### Cardigann gotcha: do not template `host:port` into `search.paths`
+
+Prowlarr's Cardigann engine runs every `{{ .Config.foo }}` value
+substituted into `search.paths[*].path` through `WebUtility.UrlEncode`
+(see `CardigannRequestGenerator.cs`, the `ApplyGoTemplateText(...,
+WebUtility.UrlEncode)` call). That turns `127.0.0.1:8882` into
+`127.0.0.1%3A8882`, producing `http://127.0.0.1%3A8882/...`, which
+.NET's `Uri` parser rejects with `Invalid URI: The hostname could not
+be parsed.` when Prowlarr clicks **Test**.
+
+**Hardcode the proxy URL** (literal text in the path is *not* run
+through the encoder; only substituted values are). If you want the port
+to be tunable from the UI, expose it via a `type: info` settings entry
+so the user knows where to edit. The shipped
+`definitions/apibay-byparr.yml` is the reference for this pattern.
+
+Upstream `thepiratebay.yml` gets away with the template because
+`apibay.org` contains no characters the encoder rewrites.
+
 ### JSON / RSS indexers need byparr-unwrap
 
 If the upstream returns JSON, RSS, or any other non-HTML body (apibay,
