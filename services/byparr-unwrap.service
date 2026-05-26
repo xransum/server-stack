@@ -1,0 +1,27 @@
+[Unit]
+Description=Byparr unwrap sidecar (strips Firefox plaintext-viewer wrapper from Byparr responses)
+After=network-online.target byparr.service
+Wants=network-online.target
+# Soft-bind to Byparr: if Byparr restarts we keep running and reconnect on next request.
+# Use Requires= instead if you want the sidecar to stop when Byparr stops.
+
+[Service]
+Type=simple
+# Runs as nobody:nogroup since this is a pure stdlib proxy with no filesystem
+# needs. Override with User= if you prefer.
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/python3 /opt/byparr-unwrap/byparr-unwrap.py
+Restart=on-failure
+RestartSec=5
+
+# Defaults match docs/byparr-unwrap.md. Override here if you change Byparr's
+# port or want to bind the sidecar somewhere else.
+Environment=UNWRAP_LISTEN_HOST=0.0.0.0
+Environment=UNWRAP_LISTEN_PORT=8193
+Environment=UNWRAP_UPSTREAM_URL=http://127.0.0.1:8192
+Environment=UNWRAP_TIMEOUT=300
+Environment=UNWRAP_LOG_LEVEL=INFO
+
+[Install]
+WantedBy=multi-user.target
