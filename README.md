@@ -12,6 +12,7 @@ utilities.
 | Prowlarr | Indexer management | 9696 | [Install & Config](docs/prowlarr.md) |
 | rdt-client | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
 | FlareSolverr | Cloudflare bypass proxy | 8191 | [Install & Config](docs/flaresolverr.md) |
+| Byparr | Cloudflare bypass proxy (Firefox/Camoufox, evaluating vs FlareSolverr) | 8192 | [Install & Config](docs/byparr.md) |
 | Decluttarr | Queue cleanup for failed/stalled downloads | - | [Install & Config](docs/decluttarr.md) |
 | queue-cleaner | Sidecar for stuck rdt-client 500 queue items | - | [Install & Config](docs/queue-cleaner.md) |
 | ClamAV | Malware scanning | - | [Install & Config](docs/clamav.md) |
@@ -65,7 +66,8 @@ This stack is installed manually. Follow the docs in order:
 6. [Decluttarr](docs/decluttarr.md) - install queue cleanup for failed/stalled downloads
 7. [queue-cleaner](docs/queue-cleaner.md) - install the rdt-client 500 sidecar
 8. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
-9. [ClamAV](docs/clamav.md) - install malware scanning (optional)
+9. [Byparr](docs/byparr.md) - install the newer Firefox-based Cloudflare bypass proxy and A/B against FlareSolverr (optional)
+10. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
 ### File structure
 
@@ -90,6 +92,7 @@ This stack is installed manually. Follow the docs in order:
             config.yaml <- Decluttarr config
     queue-cleaner/
         queue-cleaner.py <- queue-cleaner script
+    byparr/             <- Byparr source (cloned repo, deps in pyenv venv)
 
 /etc/
     queue-cleaner.env   <- queue-cleaner API keys and settings (root:root 600)
@@ -110,7 +113,7 @@ for full details.
 
 ```bash
 # Check status
-sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer
+sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer byparr
 
 # Restart a service
 sudo systemctl restart radarr
@@ -125,7 +128,8 @@ sudo journalctl -u radarr -n 50
   Running all services as the same media user means Sonarr and Radarr can read these
   nested folders directly without any issues.
 - FlareSolverr effectiveness depends on Chromium version. See
-  [FlareSolverr docs](docs/flaresolverr.md) for details.
+  [FlareSolverr docs](docs/flaresolverr.md) for details. Byparr is being
+  evaluated as a replacement; see [Byparr docs](docs/byparr.md).
 - Sonarr can show No indexers available if Prowlarr sync fails. See
   [Prowlarr troubleshooting](docs/prowlarr.md) for details.
 

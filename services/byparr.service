@@ -1,0 +1,25 @@
+[Unit]
+Description=Byparr (Cloudflare bypass proxy, FlareSolverr-compatible API)
+After=network.target
+
+[Service]
+# Runs as your sudo user because:
+#   - pyenv lives under ~/.pyenv
+#   - Camoufox needs HOME for its Firefox profile/cache (~/.cache/camoufox)
+# Replace YOUR_USER with your actual username when installing.
+User=YOUR_USER
+WorkingDirectory=/opt/byparr
+ExecStart=/usr/bin/xvfb-run -a /home/YOUR_USER/.pyenv/versions/byparr-env/bin/python /opt/byparr/main.py
+Restart=on-failure
+RestartSec=10
+
+Environment=HOME=/home/YOUR_USER
+Environment=HOST=0.0.0.0
+# 8192 so we can run side-by-side with FlareSolverr (8191) for A/B testing.
+# Once Byparr fully replaces FlareSolverr, switch this to 8191 and update
+# the Prowlarr indexer proxy URL.
+Environment=PORT=8192
+Environment=LOG_LEVEL=info
+
+[Install]
+WantedBy=multi-user.target
