@@ -1,5 +1,18 @@
 # FlareSolverr
 
+> **Deprecated in this stack.** Kept as a reference install for the
+> Chromium-based bypass path, but not enabled by default. Byparr (see
+> [byparr.md](byparr.md)) replaces it as the bypass engine, and
+> [byparr-proxy](byparr-proxy.md) handles the actual Turnstile-protected
+> indexers via a Base-URL passthrough rather than Prowlarr's indexer-proxy
+> mechanism. Prowlarr's cookie-replay model is architecturally broken for
+> Turnstile sites regardless of which solver is on the back end — see
+> [Byparr cookie-replay limitation](byparr.md#prowlarr-cookie-replay-limitation).
+>
+> Only install FlareSolverr if you have a specific classic-CF JS-challenge
+> indexer that does not work through byparr-proxy and you want to use
+> Prowlarr's indexer-proxy mechanism. Otherwise leave it disabled.
+
 Cloudflare bypass proxy for Prowlarr. FlareSolverr uses a headless Chromium browser to solve Cloudflare challenges so Prowlarr can access protected indexer sites.
 
 - **Port**: 8191

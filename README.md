@@ -11,9 +11,10 @@ utilities.
 | Sonarr | TV show management | 8989 | [Install & Config](docs/sonarr.md) |
 | Prowlarr | Indexer management | 9696 | [Install & Config](docs/prowlarr.md) |
 | rdt-client | Real-Debrid download client | 6500 | [Install & Config](docs/rdt-client.md) |
-| FlareSolverr | Cloudflare bypass proxy | 8191 | [Install & Config](docs/flaresolverr.md) |
-| Byparr | Cloudflare bypass proxy (Firefox/Camoufox, evaluating vs FlareSolverr) | 8192 | [Install & Config](docs/byparr.md) |
-| byparr-unwrap | Sidecar that strips Byparr's Firefox plaintext-viewer wrapper from JSON/XML responses | 8193 | [Install & Config](docs/byparr-unwrap.md) |
+| FlareSolverr | Cloudflare bypass proxy (Chromium, deprecated in favor of Byparr; install only if needed) | 8191 | [Install & Config](docs/flaresolverr.md) |
+| Byparr | Cloudflare bypass engine (Firefox/Camoufox) | 8192 | [Install & Config](docs/byparr.md) |
+| byparr-unwrap | Sidecar that strips Byparr's Firefox plaintext-viewer wrapper from JSON/XML responses (disabled by default; only needed if wiring Byparr as a Prowlarr indexer proxy) | 8193 | [Install & Config](docs/byparr-unwrap.md) |
+| byparr-proxy | HTTP passthrough fronting Cloudflare-Turnstile indexers (1337x, apibay) so Prowlarr never triggers its broken cookie-replay path | 8881+ | [Install & Config](docs/byparr-proxy.md) |
 | Decluttarr | Queue cleanup for failed/stalled downloads | - | [Install & Config](docs/decluttarr.md) |
 | queue-cleaner | Sidecar for stuck rdt-client 500 queue items | - | [Install & Config](docs/queue-cleaner.md) |
 | ClamAV | Malware scanning | - | [Install & Config](docs/clamav.md) |
@@ -66,10 +67,11 @@ This stack is installed manually. Follow the docs in order:
 5. [Prowlarr](docs/prowlarr.md) - install the indexer manager and connect it to Radarr/Sonarr
 6. [Decluttarr](docs/decluttarr.md) - install queue cleanup for failed/stalled downloads
 7. [queue-cleaner](docs/queue-cleaner.md) - install the rdt-client 500 sidecar
-8. [FlareSolverr](docs/flaresolverr.md) - install the Cloudflare bypass proxy (optional)
-9. [Byparr](docs/byparr.md) - install the newer Firefox-based Cloudflare bypass proxy and A/B against FlareSolverr (optional)
-10. [byparr-unwrap](docs/byparr-unwrap.md) - install the sidecar that fixes Byparr's Firefox plaintext-viewer wrapper bug (required if using Byparr with Prowlarr)
-11. [ClamAV](docs/clamav.md) - install malware scanning (optional)
+8. [FlareSolverr](docs/flaresolverr.md) - optional, deprecated in this stack (kept as reference for the Chromium bypass path; only install if you have a specific classic-CF indexer that needs it)
+9. [Byparr](docs/byparr.md) - install the Firefox-based Cloudflare bypass engine (required if you need any Turnstile-protected indexer)
+10. [byparr-unwrap](docs/byparr-unwrap.md) - optional sidecar, install only if wiring Byparr in as a Prowlarr indexer proxy (most setups do not need this)
+11. [byparr-proxy](docs/byparr-proxy.md) - install one instance per Turnstile-protected indexer (1337x, apibay, etc.)
+12. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
 ### File structure
 
@@ -97,9 +99,13 @@ This stack is installed manually. Follow the docs in order:
     byparr/             <- Byparr source (cloned repo, deps in pyenv venv)
     byparr-unwrap/
         byparr-unwrap.py <- byparr-unwrap sidecar script
+    byparr-proxy/
+        byparr-proxy.py  <- byparr-proxy HTTP passthrough script
 
 /etc/
     queue-cleaner.env   <- queue-cleaner API keys and settings (root:root 600)
+    byparr-proxy/
+        <instance>.env  <- one env file per byparr-proxy instance (e.g. 1337x.env)
 
 /var/lib/
     radarr/             <- Radarr config and database
@@ -117,7 +123,7 @@ for full details.
 
 ```bash
 # Check status
-sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer byparr byparr-unwrap
+sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer byparr 'byparr-proxy@*'
 
 # Restart a service
 sudo systemctl restart radarr
@@ -132,13 +138,16 @@ sudo journalctl -u radarr -n 50
   Running all services as the same media user means Sonarr and Radarr can read these
   nested folders directly without any issues.
 - FlareSolverr effectiveness depends on Chromium version. See
-  [FlareSolverr docs](docs/flaresolverr.md) for details. Byparr is being
-  evaluated as a replacement; see [Byparr docs](docs/byparr.md).
+  [FlareSolverr docs](docs/flaresolverr.md) for details. It is deprecated
+  in this stack in favor of Byparr; see [Byparr docs](docs/byparr.md).
 - Prowlarr's FlareSolverr indexer proxy harvests cookies from the bypass
   solver then replays the request directly. Sites using Cloudflare
   **Turnstile** (1337x, apibay/ThePirateBay, kickass mirrors) issue no
   `cf_clearance` cookie, so the replay fails regardless of solver. See
   [Byparr - Prowlarr cookie-replay limitation](docs/byparr.md#prowlarr-cookie-replay-limitation).
+  Work around it per Turnstile site with [byparr-proxy](docs/byparr-proxy.md),
+  which fronts the site as a plain HTTP indexer Base URL so Prowlarr
+  never enters the cookie-replay path.
 - Sonarr can show No indexers available if Prowlarr sync fails. See
   [Prowlarr troubleshooting](docs/prowlarr.md) for details.
 

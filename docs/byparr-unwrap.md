@@ -1,5 +1,15 @@
 # byparr-unwrap
 
+> **Disabled by default in this stack.** This sidecar is only needed if
+> you wire Byparr in as a Prowlarr indexer proxy (the
+> Settings -> Indexer Proxies entry). In the default setup, Turnstile
+> indexers go through [byparr-proxy](byparr-proxy.md) as plain HTTP Base
+> URLs instead, which fetches HTML — the Firefox-plaintext-viewer
+> wrapper bug this sidecar fixes only affects JSON / RSS / PDF responses
+> and never fires on the byparr-proxy path. Keep this doc as a reference
+> for when (if) a future indexer needs the classic Prowlarr indexer-proxy
+> wiring.
+
 Sidecar HTTP proxy that fixes a known [Byparr](byparr.md) bug where
 non-HTML responses (JSON, XML, plain text, PDF) come back wrapped in
 Firefox's built-in plaintext-viewer HTML instead of as raw bytes.
@@ -178,6 +188,7 @@ the site directly; if the site uses Cloudflare Turnstile, no
 `cf_clearance` cookie is issued and the replay always fails. Affects
 1337x.to, apibay.org / ThePirateBay, kickass mirrors, and any other
 Turnstile-protected indexer regardless of which solver is on the back end.
+Workaround per Turnstile site: install [byparr-proxy](byparr-proxy.md).
 
 ### Sidecar logs `unwrapped` but Prowlarr still sees garbage
 

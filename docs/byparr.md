@@ -158,41 +158,27 @@ A healthy response has `"status": "ok"` and `"solution"` populated with a
 `url`, `status` 200, and a `response` body containing 1337x HTML. If you see
 a Cloudflare challenge page in `response`, Byparr did not solve it.
 
-## Prowlarr A/B integration
+## Prowlarr integration
 
-> **Heads up:** Byparr has a known bug where non-HTML responses (JSON,
-> XML, RSS, PDF) come back wrapped in Firefox's plaintext viewer HTML,
-> which breaks Prowlarr's response parsing. Install the
-> [byparr-unwrap sidecar](byparr-unwrap.md) and point Prowlarr at the
-> sidecar's port (`8193`) instead of Byparr's `8192` to fix this. The
-> instructions below assume the sidecar is in place.
+Byparr in this stack is **not** wired into Prowlarr as a generic
+indexer proxy. The "indexer proxy" mechanism (in both FlareSolverr and
+Byparr's case) is the cookie-replay path that
+[fails for Turnstile sites](#prowlarr-cookie-replay-limitation), and
+none of the currently configured indexers (YTS, Nyaa, Knaben, Torrent
+Downloads) need Cloudflare bypass at all.
 
-The plan is to keep FlareSolverr's existing proxy entry in place and add
-Byparr as a second proxy, then switch one indexer at a time over to Byparr
-to compare results.
+Byparr's role here is to act as the solving engine behind
+[byparr-proxy](byparr-proxy.md), which fronts individual
+Turnstile-protected indexers as plain HTTP Base URLs. See that doc for
+the actual Prowlarr setup.
 
-1. In Prowlarr: Settings -> Indexer Proxies -> **Add** -> **FlareSolverr**
-   (yes, FlareSolverr; the proxy type is the API shape, not the backend)
-   - Name: `Byparr`
-   - Host: `http://localhost:8193` (the unwrap sidecar; falls through to
-     Byparr on 8192)
-   - Tags: add a new tag `byparr`
-   - Test and Save
-2. Go to Indexers, click the failing indexer (e.g. **1337x**):
-   - Remove the `flaresolverr` tag (or whatever tag your FlareSolverr proxy
-     uses)
-   - Add the `byparr` tag
-   - Test and Save
-3. Run a search against that indexer in Prowlarr's Search tab and confirm
-   results come back. Cross-check the Byparr log to confirm it served the
-   request:
-   ```bash
-   sudo journalctl -u byparr -n 50 --no-pager
-   ```
-
-Repeat tag swaps for each indexer you want to evaluate. Indexers that keep
-working under FlareSolverr can stay on it; indexers that start working
-under Byparr stay on Byparr. Once the verdict is clear, prune the loser.
+If you ever need to put Byparr on Prowlarr's indexer-proxy mechanism
+for a classic Cloudflare JS-challenge site (rare in 2026), install the
+[byparr-unwrap sidecar](byparr-unwrap.md) first and point Prowlarr at
+`http://localhost:8193`. The unwrap sidecar fixes Byparr's
+Firefox-plaintext-viewer wrapper bug on JSON/RSS responses; without it
+Prowlarr cannot parse the response. The sidecar is shipped disabled by
+default in this stack since no indexer currently needs it.
 
 ## Service Management
 
@@ -315,25 +301,17 @@ The empty cookie list is the smoking gun.
 | Classic CF JS challenge (issues clearance)| Works                  |
 | Cloudflare Turnstile (1337x, apibay, ...) | **Fails** (no cookies) |
 
-There is no workaround at the Byparr or sidecar layer. A real fix would
-require Prowlarr to use Byparr's `solution.response` body directly
-instead of replaying the request. That is an upstream Prowlarr change.
+There is no workaround at the Byparr or sidecar layer. The fix is to
+take Prowlarr out of the cookie-replay path entirely by fronting the
+target site as a plain HTTP indexer Base URL — that is what
+[byparr-proxy](byparr-proxy.md) does. Prowlarr only ever sees clean
+`200 OK` HTML from `127.0.0.1`, never triggers its CF detection, never
+attempts a replay. Use it for any Turnstile-protected indexer you want
+to keep.
 
-Until then: for Turnstile-protected indexers, prefer mirrors that do not
-front Turnstile, or substitute equivalent indexers that do not require
-bypass.
+A "real" fix in Prowlarr would be to use Byparr's `solution.response`
+body directly instead of replaying. That is an upstream Prowlarr change
+nobody has shipped.
 
-## Once the A/B is decided
-
-If Byparr wins across the board:
-
-1. Update this doc's port to `8191` and `EnvironmentFile`'s `PORT=8191`.
-2. `sudo systemctl disable --now flaresolverr`
-3. Remove the FlareSolverr indexer proxy from Prowlarr; tag-swap any
-   remaining indexers to `byparr`.
-4. Optionally `pyenv uninstall flaresolverr-env` and delete
-   `/etc/systemd/system/flaresolverr.service`.
-5. Update `docs/flaresolverr.md` with a "Deprecated, see byparr.md" header
-   and remove FlareSolverr from `README.md`.
-
-If results are mixed, keep both indefinitely with per-indexer tags.
+Until then: install [byparr-proxy](byparr-proxy.md) per Turnstile site,
+or substitute equivalent indexers that do not require bypass.

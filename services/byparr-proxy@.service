@@ -1,0 +1,25 @@
+[Unit]
+Description=byparr-proxy (HTTP passthrough fronting %i via Byparr)
+After=network-online.target byparr.service
+Wants=network-online.target
+# Soft-bind to Byparr: if Byparr restarts we keep running and reconnect on
+# next request. Use Requires=byparr.service if you want this instance to
+# stop when Byparr stops.
+
+# Template unit: one instance per upstream indexer. Enable with the
+# instance name matching the env file under /etc/byparr-proxy/:
+#   sudo systemctl enable --now byparr-proxy@1337x
+# loads /etc/byparr-proxy/1337x.env.
+
+[Service]
+Type=simple
+# Pure stdlib HTTP proxy, no filesystem or network privileges required.
+User=nobody
+Group=nogroup
+EnvironmentFile=/etc/byparr-proxy/%i.env
+ExecStart=/usr/bin/python3 /opt/byparr-proxy/byparr-proxy.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
