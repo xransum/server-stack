@@ -160,6 +160,13 @@ a Cloudflare challenge page in `response`, Byparr did not solve it.
 
 ## Prowlarr A/B integration
 
+> **Heads up:** Byparr has a known bug where non-HTML responses (JSON,
+> XML, RSS, PDF) come back wrapped in Firefox's plaintext viewer HTML,
+> which breaks Prowlarr's response parsing. Install the
+> [byparr-unwrap sidecar](byparr-unwrap.md) and point Prowlarr at the
+> sidecar's port (`8193`) instead of Byparr's `8192` to fix this. The
+> instructions below assume the sidecar is in place.
+
 The plan is to keep FlareSolverr's existing proxy entry in place and add
 Byparr as a second proxy, then switch one indexer at a time over to Byparr
 to compare results.
@@ -167,7 +174,8 @@ to compare results.
 1. In Prowlarr: Settings -> Indexer Proxies -> **Add** -> **FlareSolverr**
    (yes, FlareSolverr; the proxy type is the API shape, not the backend)
    - Name: `Byparr`
-   - Host: `http://localhost:8192`
+   - Host: `http://localhost:8193` (the unwrap sidecar; falls through to
+     Byparr on 8192)
    - Tags: add a new tag `byparr`
    - Test and Save
 2. Go to Indexers, click the failing indexer (e.g. **1337x**):
@@ -254,6 +262,66 @@ That is a Cloudflare-side win, not a Byparr bug. Per the FlareSolverr doc's
 *Realistic Expectations* section, no open-source bypass tool is universal.
 Fall back to indexers that do not require Cloudflare bypass for that
 content type.
+
+## Prowlarr cookie-replay limitation
+
+Verified behavior of Prowlarr 2.x against Cloudflare Turnstile sites
+(1337x, apibay/ThePirateBay, kickass mirrors): even when Byparr
+successfully solves the challenge, Prowlarr still reports
+`Unable to access <host>, blocked by CloudFlare Protection.`
+
+This is **architectural in Prowlarr**, not a Byparr or sidecar bug.
+Reading `NzbDrone.Core.IndexerProxies.FlareSolverr.FlareSolverr.PostResponse`:
+
+1. Prowlarr requests the indexer URL **directly** (Byparr not involved).
+2. If the response has `Server: cloudflare` AND status `503`/`403` AND
+   the body title looks like a CF challenge, Prowlarr decides CF is
+   blocking it and routes through Byparr.
+3. Byparr solves the challenge inside Camoufox and returns the page
+   plus a `solution.cookies` array.
+4. Prowlarr **discards `solution.response`**, copies cookies and
+   user-agent onto a new request, and re-fetches the URL **directly**
+   with its own HttpClient.
+5. If that re-request still trips CF detection, the
+   "blocked by CloudFlare Protection" error is raised.
+
+For sites using the classic Cloudflare JS challenge, the harvested
+`cf_clearance` cookie is sufficient and the replay succeeds. For sites
+using **Turnstile** (which is what 1337x/apibay/etc. have moved to in
+2026), Cloudflare does not issue a `cf_clearance` cookie at all -
+Turnstile validates per-request via a one-shot token, so
+`solution.cookies` from Byparr is empty and the replay fails instantly.
+
+Confirm with:
+
+```bash
+# Direct call returns 403 with cf-mitigated: challenge.
+curl -sI -A "Mozilla/5.0" https://apibay.org/precompiled/data_top100_recent.json | grep -iE 'http|server|cf-'
+
+# Byparr solves it (status 200) but solution.cookies is [].
+curl -s -X POST http://localhost:8193/v1 \
+  -H 'Content-Type: application/json' \
+  -d '{"cmd":"request.get","url":"https://apibay.org/precompiled/data_top100_recent.json","maxTimeout":60000}' \
+  | python3 -c 'import json,sys; s=json.load(sys.stdin)["solution"]; print("status:",s["status"]); print("cookies:",[c["name"] for c in s["cookies"]])'
+```
+
+The empty cookie list is the smoking gun.
+
+### What does and does not work
+
+| Indexer type                              | Status through Byparr  |
+| ----------------------------------------- | ---------------------- |
+| No Cloudflare (Nyaa, etc.)                | Works                  |
+| Classic CF JS challenge (issues clearance)| Works                  |
+| Cloudflare Turnstile (1337x, apibay, ...) | **Fails** (no cookies) |
+
+There is no workaround at the Byparr or sidecar layer. A real fix would
+require Prowlarr to use Byparr's `solution.response` body directly
+instead of replaying the request. That is an upstream Prowlarr change.
+
+Until then: for Turnstile-protected indexers, prefer mirrors that do not
+front Turnstile, or substitute equivalent indexers that do not require
+bypass.
 
 ## Once the A/B is decided
 
