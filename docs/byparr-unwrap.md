@@ -194,3 +194,29 @@ Workaround per Turnstile site: install [byparr-proxy](byparr-proxy.md).
 Confirm Byparr is not also behind some other middleware (reverse proxy,
 nginx with gzip-on, etc.) that might re-encode after the sidecar. The
 sidecar must be the *last* hop before Prowlarr.
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, byparr-unwrap runs as a container in
+the `cloudflare-bypass` profile. See `compose/docker-compose.yml` for
+the full service definition.
+
+```bash
+# From repo root on media-vm
+docker compose -f compose/docker-compose.yml --profile cloudflare-bypass up -d byparr-unwrap
+```
+
+The container is built from `docker/byparr-unwrap/Dockerfile` using the
+repo root as build context. It reads the same environment variables as
+the native install (`PORT`, `LOG_LEVEL`, `BYPARR`) — set them in
+`compose/docker-compose.yml` under the `byparr-unwrap` service's
+`environment:` block.
+
+Service URLs inside the Docker network use container names:
+- byparr-unwrap listens on `http://byparr-unwrap:8193/v1`
+- byparr-proxy-apibay points its `BYPARR=` at `http://byparr-unwrap:8193/v1`
+- Byparr itself is at `http://byparr:8191/v1`
+
+See `compose/README.md` for the full profile startup order.

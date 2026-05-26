@@ -159,3 +159,22 @@ profile a show uses.
 ## Notifications
 
 See [notifications](notifications.md) for Discord webhook setup.
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, Sonarr runs as a container in the
+`indexers` profile using the official LinuxServer image. See
+`compose/docker-compose.yml` for the full service definition and
+`compose/README.md` for startup instructions.
+
+Key difference from native install: the `/mnt/media` NFS share must be
+mounted at the same path inside the container as on the VM host. The
+compose file bind-mounts `/mnt/media:/mnt/media` for this reason —
+hardlinks between `downloads/complete` and `tv/` require both paths to
+be on the same filesystem. Do not split them across separate mounts.
+
+Sonarr's SQLite database lives in a named Docker volume (`sonarr-config`)
+on the VM's local disk, **not** on NFS. SQLite over NFS has locking
+issues under concurrent access.

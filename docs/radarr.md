@@ -170,3 +170,20 @@ Do not delete the movie from Radarr or Overseerr - just update the profile and s
 ## Notifications
 
 See [notifications](notifications.md) for Discord webhook setup.
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, Radarr runs as a container in the
+`indexers` profile using the official LinuxServer image. See
+`compose/docker-compose.yml` for the full service definition and
+`compose/README.md` for startup instructions.
+
+Same hardlink requirement as Sonarr: `/mnt/media` must be mounted at the
+same path inside the container. The compose file bind-mounts
+`/mnt/media:/mnt/media`. Do not split `downloads/` and `movies/` across
+separate mounts — hardlinks require the same filesystem.
+
+Radarr's SQLite database lives in a named Docker volume (`radarr-config`)
+on the VM's local disk, not on NFS.

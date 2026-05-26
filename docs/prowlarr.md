@@ -162,3 +162,25 @@ If Radarr or Sonarr show `No indexers available` after configuring Prowlarr:
 2. Open the Radarr or Sonarr entry
 3. Re-save it without changes to force a re-sync
 4. Check that the API key and URL are correct
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, Prowlarr runs as a container in the
+`indexers` profile using the official LinuxServer image. See
+`compose/docker-compose.yml` for the full service definition.
+
+Custom Cardigann definitions (the byparr-proxy indexer YAMLs from
+`definitions/`) are bind-mounted into the container from
+`compose/custom-definitions/`. Create that directory and copy them in
+before starting Prowlarr:
+
+```bash
+mkdir -p compose/custom-definitions
+cp definitions/*.yml compose/custom-definitions/
+```
+
+Inside the Docker network, Sonarr and Radarr are reachable at
+`http://sonarr:8989` and `http://radarr:7878` — use these URLs when
+configuring Prowlarr's Apps settings, not `localhost`.

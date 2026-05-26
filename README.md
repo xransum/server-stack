@@ -1,7 +1,24 @@
 # server-stack
 
-Self-hosted server stack on Debian 12. Covers media automation and network
-utilities.
+Self-hosted server stack for a Debian 12 media server (`serverhub`).
+Covers media automation, Cloudflare bypass, and network utilities.
+
+## Deployment targets
+
+| Target | Status | Notes |
+|---|---|---|
+| Native systemd (`serverhub`, Debian 12) | **Current production** | All `services/*.service` units, scripts in `/opt/`, env files in `/etc/` |
+| Docker Compose (`media-vm` on Proxmox) | **Lab target — untested** | `compose/docker-compose.yml`, awaiting Proxmox homelab hardware |
+
+The Docker Compose stack mirrors the native systemd stack service-for-service.
+See `compose/README.md` for Docker startup instructions and
+`docs/migration.md` for the full cutover plan from native → Docker.
+
+Architecture and hardware planning docs:
+- `docs/storage.md` — TrueNAS NAS, ZFS pool layout, expansion guide
+- `docs/proxmox-compute.md` — Proxmox VM layout, GPU passthrough, devbox workflow
+- `docs/homelab-hardware.md` — hardware BOM and shopping list
+- `docs/migration.md` — step-by-step cutover runbook
 
 ## Media
 

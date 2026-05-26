@@ -165,3 +165,19 @@ following in Settings > qBittorrent / *darr:
   automatically clean up completed downloads
 - **Exclude files**: Add `.*\.(txt|jpg|jpeg|png|torrent|nfo|exe|sh|bash|md[0-9])$`
   to skip junk files included in some torrents
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, rdt-client runs as a container in the
+`indexers` profile using the `rogerfar/rdtclient` image. See
+`compose/docker-compose.yml` for the full service definition.
+
+The `/mnt/media/downloads` directory is bind-mounted into the container
+at the same path. The rdt-client database (`rdtclient.db`) lives in a
+named Docker volume (`rdt-client-config`) on the VM's local disk.
+
+Inside the Docker network, Sonarr and Radarr connect to rdt-client at
+`http://rdt-client:6500` — use this URL when configuring the download
+client in Sonarr/Radarr's Settings → Download Clients.

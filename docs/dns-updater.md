@@ -126,3 +126,28 @@ sudo systemctl stop dns-updater.timer
     .env                <- runtime config (not committed)
     venv/               <- Python virtual environment
 ```
+
+---
+
+## Docker install
+
+> **Deprecation notice:** dns-updater is superseded by Cloudflare Tunnel
+> (`cloudflared`, `proxy` profile in `compose/docker-compose.yml`) once
+> the lab stack is live. CF Tunnel requires no DDNS at all — the tunnel
+> is outbound from your network and Cloudflare handles routing. If you
+> are running CF Tunnel, skip this service entirely.
+
+For reference or fallback, dns-updater can run as a Docker container in
+the `infra` profile:
+
+```bash
+# From repo root on media-vm
+docker compose -f compose/docker-compose.yml --profile infra up -d dns-updater
+```
+
+The container is built from `docker/dns-updater/Dockerfile`. Note that
+dns-updater is the one custom service in this repo that installs pip
+packages (`requests`, `python-dotenv`) — it predates the stdlib-only
+convention. Credentials go in a `dns-updater.env` file (copy from
+`docker/dns-updater/example.env`) and referenced via `DNS_UPDATER_ENV`
+in `compose/.env`.

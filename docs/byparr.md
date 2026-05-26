@@ -315,3 +315,24 @@ nobody has shipped.
 
 Until then: install [byparr-proxy](byparr-proxy.md) per Turnstile site,
 or substitute equivalent indexers that do not require bypass.
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, Byparr runs as a container in the
+`cloudflare-bypass` profile using the official
+`ghcr.io/thephaseless/byparr` image. No custom Dockerfile needed.
+
+```bash
+docker compose -f compose/docker-compose.yml --profile cloudflare-bypass up -d byparr
+```
+
+Inside the Docker network, Byparr is reachable at `http://byparr:8191/v1`.
+byparr-proxy instances and byparr-unwrap point their `BYPARR=` env var
+at this address (not `localhost`) — this is already set correctly in
+`compose/docker-compose.yml`.
+
+Byparr requires a real browser (Camoufox/Firefox) and significant RAM
+(~500MB–1GB per active solve). No special Docker flags needed beyond
+what the official image handles internally.

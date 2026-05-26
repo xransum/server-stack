@@ -188,3 +188,30 @@ sudo systemctl show queue-cleaner.service -p Environment
 curl -s -H "X-Api-Key: $(grep ^SONARR_API_KEY /etc/queue-cleaner.env | cut -d= -f2)" \
   http://localhost:8989/api/v3/system/status | python3 -m json.tool | head -5
 ```
+
+---
+
+## Docker install
+
+In the Docker Compose lab target, queue-cleaner runs as a container in
+the `indexers` profile. See `compose/docker-compose.yml` for the full
+service definition.
+
+The native install uses a systemd timer (`queue-cleaner.timer`) to run
+the script every 5 minutes. In Docker there is no systemd, so the
+container loops with a `sleep 300` between runs. This is noted in the
+compose file and can be replaced with a proper cron container if preferred.
+
+```bash
+# From repo root on media-vm
+docker compose -f compose/docker-compose.yml --profile indexers up -d queue-cleaner
+```
+
+The container is built from `docker/queue-cleaner/Dockerfile`. API keys
+and settings go in a `queue-cleaner.env` file (copy from
+`docker/queue-cleaner/example.env`) and referenced via `QUEUE_CLEANER_ENV`
+in `compose/.env`.
+
+Note: inside the Docker network, `SONARR_URL` and `RADARR_URL` use
+container names (`http://sonarr:8989`, `http://radarr:7878`) not
+`localhost`. See `docker/queue-cleaner/example.env`.
