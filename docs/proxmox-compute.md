@@ -36,17 +36,30 @@ in a cloud VM.
 
 ## VM layout
 
+> **Compute server hardware (confirmed, pending DDR5 price drop):**
+> - CPU: AMD Ryzen 9 7950X3D (AM5, 16c/32t, 5.7GHz boost, 3D V-Cache)
+> - Motherboard: ASUS ProArt X870E-CREATOR WiFi
+> - RAM: 64GB DDR5-6400 (waiting for price to drop from $829 to ~$450-500)
+> - GPU: NVIDIA RTX 2070 (PCIe passthrough to media-vm, moved from serverhub)
+> - Boot NVMe: WD Green SN350 250GB (Proxmox OS)
+> - VM NVMe: Samsung 990 Pro 2TB (VM disk images)
+> - Network: 10Gtek X550-AT2 10GbE NIC
+> - PSU: Seasonic Focus GX-1000W ATX 3.1
+>
+> GPU passthrough: RTX 2070 supports NVENC for Plex (4-6 simultaneous 1080p
+> transcodes). 4K HDR -> 1080p SDR tone-mapped transcodes are supported
+> (Turing architecture). Plex Pass required for hardware transcoding.
+
 | VM | vCPU | RAM | Local disk | GPU | Purpose |
 |---|---|---|---|---|---|
-| `media-vm` | 8–12 cores | 16–32 GB | 64 GB (OS + Docker layers) | NVIDIA 2070 (PCIe PT) | Full media stack: Plex, Sonarr, Radarr, Prowlarr, rdt-client, Overseerr, Tautulli, byparr, byparr-proxy, byparr-unwrap, reverse proxy, S3 service |
-| `gameservers-vm` | 8–12 cores | 16–32 GB | 32 GB (OS + Docker layers) | None | Game server stack: Pterodactyl Panel + per-game containers. On-demand, not always running. |
-| `devbox-template` | 4 cores | 8 GB | 32 GB (thin provisioned) | None | Never run directly. Template for linked clones. |
-| `devbox-N` | 4 cores | 8 GB | Thin clone | None | SSH over Tailscale. Spin up/tear down on demand. |
+| `media-vm` | 10 cores | 24 GB | 64 GB | RTX 2070 (PCIe PT) | Full media stack |
+| `gameservers-vm` | 8 cores | 32 GB | 32 GB | None | Pterodactyl + game containers |
+| `devbox-template` | 4 cores | 8 GB | 32 GB (thin) | None | Template only, never run directly |
+| `devbox-N` | 4 cores | 8 GB | Thin clone | None | On-demand dev work |
 
-> **Note:** vCPU and RAM numbers above are starting points. The actual
-> allocation depends on the physical host spec, which is not yet finalized.
-> See open decisions below. Size conservatively at first — Proxmox lets you
-> hot-add vCPUs and RAM to running VMs (with some caveats).
+> **Host allocation note:** these allocations assume the 7950X3D physical host
+> (16c/32t total). Leave 2 cores and ~8GB unallocated on the host for Proxmox
+> overhead.
 
 > **Note on gameservers-vm RAM:** Some games are very RAM-hungry.
 > Minecraft with mods: 6–12 GB per instance. Valheim/Palworld: 4–8 GB.
@@ -89,9 +102,8 @@ through to `media-vm` for Plex NVENC hardware transcoding.
 1. Enable IOMMU in BIOS (AMD: SVM + IOMMU / Intel: VT-d + VT-x)
 2. Add to `/etc/default/grub`:
    ```
+   # AMD (7950X3D — confirmed hardware)
    GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_iommu=on iommu=pt"
-   # or for Intel:
-   GRUB_CMDLINE_LINUX_DEFAULT="quiet intel_iommu=on iommu=pt"
    ```
 3. `update-grub && reboot`
 4. Blacklist the NVIDIA driver on the Proxmox host (the GPU must not be
@@ -204,6 +216,54 @@ Per-game resource limits are defined in `compose/docker-compose.gameservers.yml`
 These are left as TODOs until each game is actually stood up — resource
 requirements vary significantly per game and per modpack.
 
+### Game server DNS and subdomain routing
+
+Game server traffic splits into two categories with different routing:
+
+**HTTP admin panels** (Pterodactyl Panel web UI) route through Cloudflare
+Tunnel -> Nginx PM like all other HTTP services:
+
+| Subdomain | Target | Access |
+|---|---|---|
+| `pterodactyl.xransum.com` | `gameservers-vm:80` | CF Tunnel |
+
+**Raw TCP/UDP game ports** (actual game client connections) cannot go
+through Cloudflare Tunnel (HTTP only). These use direct port forwards on
+the FIOS gateway and grey cloud DNS records on `xransum.com`.
+
+Grey cloud records: Cloudflare DNS set to DNS-only (grey cloud, not orange
+cloud). The record resolves directly to your home IP. Your home IP is
+visible to players — this is acceptable for a private server among friends.
+
+| Subdomain | DNS type | Port | Forward to |
+|---|---|---|---|
+| `mc.xransum.com` | A, grey cloud | 25565 | Minecraft LXC/container IP |
+| `mc2.xransum.com` | A, grey cloud | 25566 | Second Minecraft instance |
+| `rust.xransum.com` | A, grey cloud | 28015 | Rust server container |
+
+FIOS gateway port forward rules (add when a game server is active):
+
+| External port | Internal IP | Internal port | Protocol |
+|---|---|---|---|
+| 25565 | gameservers-vm-ip | 25565 | TCP |
+| 25566 | gameservers-vm-ip | 25566 | TCP |
+| 28015 | gameservers-vm-ip | 28015 | TCP+UDP |
+| 28016 | gameservers-vm-ip | 28016 | TCP (RCON) |
+
+Grey cloud records contain your real home IP and must be kept updated when
+the IP rotates. The `dns-updater` service handles this automatically via the
+Cloudflare API. See `docs/dns-updater.md`. Only grey cloud records need
+updating — orange cloud (proxied) subdomains are unaffected by IP changes.
+
+Minecraft players connect using the subdomain directly. The standard
+Minecraft SRV record approach works but is not required since the default
+port 25565 is already used:
+
+```dns
+# Optional SRV record (if using non-standard port)
+_minecraft._tcp.mc.xransum.com  SRV  0 5 25565  mc.xransum.com
+```
+
 ---
 
 ## Tailscale setup
@@ -224,14 +284,14 @@ For the NAS: TrueNAS Scale → Apps → Available Applications → Tailscale.
 
 ---
 
-## Cloudflare Tunnel (Overseerr public access)
+## Cloudflare Tunnel (public subdomains)
 
 Install `cloudflared` as a Docker container in media-vm. Creates an outbound
 tunnel from your network to Cloudflare's edge — no port forwarding, no public
 IP exposure.
 
-Only Overseerr (media request UI for friends/family) is exposed publicly.
-Everything else stays Tailscale-only.
+Plex and Overseerr are the only public services. Everything else stays
+Tailscale-only.
 
 ```bash
 # After creating a tunnel in Cloudflare Zero Trust dashboard:
@@ -240,16 +300,51 @@ docker run -d --name cloudflared \
   --token <your-tunnel-token>
 ```
 
-In Cloudflare Zero Trust dashboard, add a public hostname:
-`overseerr.yourdomain.com` → `http://localhost:5055`
+In Cloudflare Zero Trust dashboard, add public hostnames that point at Nginx PM:
+
+- `plex.xransum.com` → `http://nginx-proxy-manager:80`
+- `overseerr.xransum.com` → `http://nginx-proxy-manager:80`
 
 ---
+
+## Subdomain routing
+
+Public HTTP traffic routes through Cloudflare Tunnel -> Nginx PM -> the
+internal service target. Most services use Docker DNS names. Plex is the
+exception because it runs with `network_mode: host`, so Nginx PM must forward
+to the `media-vm` host IP instead.
+
+| Subdomain | Forward target | Port | Public? |
+|---|---|---|---|
+| `plex.xransum.com` | `media-vm-ip` | 32400 | CF Tunnel |
+| `overseerr.xransum.com` | `overseerr` | 5055 | CF Tunnel |
+| `sonarr.xransum.com` | `sonarr` | 8989 | Tailscale only |
+| `radarr.xransum.com` | `radarr` | 7878 | Tailscale only |
+| `prowlarr.xransum.com` | `prowlarr` | 9696 | Tailscale only |
+| `tautulli.xransum.com` | `tautulli` | 8181 | Tailscale only |
+| `rdt.xransum.com` | `rdt-client` | 6500 | Tailscale only |
+| `nas.xransum.com` | `nas-ip` | 80 | Tailscale only |
+| `proxmox.xransum.com` | `proxmox-ip` | 8006 | Tailscale only |
+| `npm.xransum.com` | `nginx-proxy-manager` | 81 | Tailscale only |
+
+Cloudflare Tunnel handles SSL termination for public subdomains. Nginx PM
+handles SSL via a Let's Encrypt wildcard cert (Cloudflare DNS-01 challenge)
+for Tailscale-accessible subdomains.
+
+---
+
+## Resolved decisions
+
+| Decision | Resolution | Notes |
+|---|---|---|
+| Compute server CPU/RAM | Ryzen 9 7950X3D (AM5) + 64GB DDR5-6400 | Wait for the DDR5 kit to drop to the $450-500 target before ordering. |
+| Reverse proxy | Nginx Proxy Manager (Nginx PM) | `jc21/nginx-proxy-manager` in `compose/docker-compose.yml`. |
+| S3 service | MinIO on TrueNAS Scale | Native app backed by `/mnt/s3/store`; not part of the media-vm compose stack. |
+| Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing. |
+| Domain | `xransum.com` | Homelab services live here. `kevin-haas.com` stays on GitHub Pages. |
 
 ## Open decisions
 
 | Decision | Options | Notes |
 |---|---|---|
-| Compute server CPU/RAM | TBD | Affects vCPU allocation numbers in this doc. Update when hardware is chosen. |
-| Reverse proxy | Caddy / Nginx Proxy Manager / Traefik / nginx | Internal routing for subdomain per service + wildcard TLS cert via Cloudflare DNS-01. Decide at lab time. |
-| S3 service | Garage / MinIO / Nextcloud | Garage: lightweight Rust, S3 API, good for personal use. MinIO: industry standard, recent license drama. Nextcloud: better if the use case is "replace Dropbox" rather than S3 API compat. Decide at lab time. |
-| WireGuard on MikroTik | Optional enhancement once MikroTik router deployed | RouterOS has built-in WireGuard. Could use as primary self-hosted VPN with Tailscale as fallback. Not required — Tailscale alone is sufficient. |
+| Per-game RAM/CPU limits | Per-game | TODOs in `compose/docker-compose.gameservers.yml`. Fill in when standing up each game. |

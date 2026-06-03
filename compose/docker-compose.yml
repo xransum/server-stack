@@ -13,8 +13,8 @@
 #   media              Plex, Tautulli, Overseerr
 #   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner
 #   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
-#   proxy              Reverse proxy (TBD) + Cloudflare Tunnel
-#   s3                 S3-compatible object storage (TBD)
+#   proxy              Nginx Proxy Manager (reverse proxy + SSL) + Cloudflare Tunnel
+#   s3                 Reserved profile (MinIO runs natively on TrueNAS)
 #   infra              dns-updater (deprecated — CF Tunnel replaces this)
 #
 # NFS mounts (add to /etc/fstab on media-vm before starting):
@@ -240,20 +240,19 @@ services:
   # ---------------------------------------------------------------------------
   # PROXY profile
   # ---------------------------------------------------------------------------
-  # Reverse proxy choice is an open decision (Caddy / Nginx Proxy Manager /
-  # Traefik / nginx). Placeholder block below — fill in at lab time.
-  # See docs/proxmox-compute.md open decisions.
-  #
-  # reverse-proxy:
-  #   <<: *restart-policy
-  #   image: <chosen-image>
-  #   profiles: [proxy]
-  #   container_name: reverse-proxy
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - reverse-proxy-config:/config
+
+  nginx-proxy-manager:
+    <<: *restart-policy
+    image: jc21/nginx-proxy-manager:latest
+    profiles: [proxy]
+    container_name: nginx-proxy-manager
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"   # Nginx PM admin UI - restrict to Tailscale access only
+    volumes:
+      - nginx-pm-data:/data
+      - nginx-pm-letsencrypt:/etc/letsencrypt
 
   cloudflared:
     <<: *restart-policy
@@ -267,17 +266,18 @@ services:
   # ---------------------------------------------------------------------------
   # S3 profile
   # ---------------------------------------------------------------------------
-  # S3 service choice is an open decision (Garage / MinIO / Nextcloud).
-  # Placeholder block below — fill in at lab time.
-  # See docs/proxmox-compute.md open decisions.
+  # RESOLVED: MinIO runs as a native TrueNAS Scale app, not on media-vm.
   #
-  # s3:
-  #   <<: *restart-policy
-  #   image: <chosen-image>
-  #   profiles: [s3]
-  #   container_name: s3
-  #   volumes:
-  #     - /mnt/s3:/data
+  # MinIO is deployed on the NAS via TrueNAS Apps, backed by `/mnt/s3/store`.
+  # It is not deployed as a Docker container in this compose stack.
+  #
+  # Usage (from any machine):
+  #   aws configure set aws_access_key_id <key>
+  #   aws configure set aws_secret_access_key <secret>
+  #   aws s3 ls s3://mybucket --endpoint-url http://nas-ip:9000
+  #
+  # Keep the `s3` profile name reserved for potential future use (for example,
+  # Garage as a media-vm sidecar), but there are no active services today.
 
   # ---------------------------------------------------------------------------
   # INFRA profile (deprecated)
@@ -309,3 +309,5 @@ volumes:
   radarr-config:
   prowlarr-config:
   rdt-client-config:
+  nginx-pm-data:
+  nginx-pm-letsencrypt:

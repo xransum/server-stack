@@ -164,11 +164,18 @@ echo 'PASSWORD' | sudo -S -p '' cp /tmp/file /dest/file
 
 ---
 
+## Resolved decisions
+
+| Decision | Resolution | Notes |
+|---|---|---|
+| Reverse proxy | Nginx Proxy Manager (Nginx PM) | Web UI, easy SSL via Let's Encrypt Cloudflare DNS-01 challenge, Docker-native workflow. |
+| S3 service | MinIO on TrueNAS Scale | Runs as a native app backed by `/mnt/s3/store`; works with AWS CLI, rclone, and standard S3 SDKs. |
+| Compute server CPU/RAM | AMD Ryzen 9 7950X3D + 64GB DDR5-6400 | Wait for the 64GB kit to hit the $450-500 target before ordering RAM; the rest of the compute parts are confirmed. |
+| Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing; do not buy a MikroTik router. |
+| Domain | `xransum.com` | Homelab services live here. `kevin-haas.com` stays pointed at GitHub Pages for the blog. |
+
 ## Open decisions (do not resolve without updating this file + session log)
 
 | Decision | Options | Notes |
 |---|---|---|
-| Reverse proxy | Caddy / Nginx Proxy Manager / Traefik / plain nginx | Internal-only, TLS via DNS-01 challenge, wildcard cert. Decide at lab time. |
-| S3 service | Garage / MinIO / Nextcloud | MinIO has license drama. Garage is lightweight Rust. Nextcloud if "replace Dropbox" is the primary use case. Decide at lab time. |
-| Compute server CPU/RAM | TBD | Affects VM sizing numbers in `docs/proxmox-compute.md`. Update that doc when hardware is chosen. |
 | Per-game RAM/CPU limits | Per-game | TODOs in `compose/docker-compose.gameservers.yml`. Fill in when standing up each game. |

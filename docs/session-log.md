@@ -9,6 +9,56 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-06-02 — Hardware finalized, open decisions resolved
+
+**Context:** Extended planning session covering NAS hardware ordering,
+compute platform decision, network simplification, and domain strategy.
+
+**Decisions:**
+
+- NAS hardware ordered. Full BOM in `docs/homelab-hardware.md`. Total:
+  $1,193.37. Core change from earlier drafts: dropped Supermicro X10SRi-F +
+  Xeon E5 (ECC, IPMI overkill for a home NAS) in favor of ASRock B550M Pro4 +
+  Ryzen 5 5600G. Saves ~$600 for identical NAS performance.
+- Compute platform: AM5 (Ryzen 9 7950X3D + ASUS ProArt X870E). Waiting on
+  DDR5 64GB to drop from $829 to ~$450-500 before ordering. Expected Q4 2026.
+  AM4/5950X rejected: would be a temporary build we'd want to replace.
+- Network simplified: dumb TP-Link TL-SX1008 10GbE switch + retain FIOS
+  gateway. MikroTik router rejected — adds complexity that Tailscale (remote
+  access) and Cloudflare Tunnel (public exposure) already handle. No managed
+  switch needed for a 2-server homelab.
+- Domain: `xransum.com` for all homelab services. `kevin-haas.com` stays on
+  GitHub Pages for the blog. No collision.
+- Reverse proxy: Nginx Proxy Manager selected. Resolves the open decision.
+  Docker image: `jc21/nginx-proxy-manager`. Added to
+  `compose/docker-compose.yml` under the `proxy` profile.
+- S3: MinIO on TrueNAS Scale as a native app (not Docker). Resolves the open
+  decision.
+- DNS/exposure strategy finalized:
+  - HTTP services: Cloudflare Tunnel (orange cloud, IP hidden)
+  - Game server TCP/UDP ports: grey cloud A records on `xransum.com`, direct
+    FIOS port forwards, `dns-updater` keeps IP current
+  - Tailscale for all internal access (devboxes, admin UIs)
+
+**Migration additions:**
+
+- Media drive on `serverhub` is 95% full (448GB free). Migration is
+  time-sensitive.
+- Correct media path: `/mnt/raid0/media/` (not `/mnt/raid/`). Subdirs:
+  `Audio`, `Downloads`, `Ebooks`, `Videos`.
+- Plex database correct path:
+  `Plug-in Support/Databases/` (not `Databases/`). System `sqlite3` cannot
+  check integrity (`icu_root` collation missing). Plex verifies internally on
+  startup.
+- Plex has 15+ active user profiles. Data migration must complete before the
+  new container starts. ~12GB total.
+- Overseerr is a snap install on `serverhub` (non-standard config path at
+  `/var/snap/overseerr/current/`).
+- Services not migrating: Apache2 (unused), FlareSolverr (replaced by Byparr),
+  Rust server (inactive), Minecraft (template only, no instances).
+
+---
+
 ## 2026-05-25 — Homelab architecture planning
 
 ### Context
@@ -48,7 +98,7 @@ NAS + Proxmox compute), services running in Docker Compose on Debian VMs.
 - Cloudflare Tunnel for Overseerr only (public-facing, friends/family request
   media without needing Tailscale). Everything else stays off the public internet.
 - `dns-updater` service deprecated once CF Tunnel is live.
-- Reverse proxy (nginx/Caddy/NPM — decision deferred) for internal subdomain
+- Reverse proxy (nginx/Caddy/Nginx PM — decision deferred) for internal subdomain
   routing + TLS via Cloudflare DNS-01 wildcard cert.
 
 **Real-debrid client:** rdtclient (already running on serverhub, works well).
@@ -67,7 +117,7 @@ ZFS snapshot the NAS dataset.
 - `docs/migration.md` — step-by-step cutover from serverhub to lab
 
 **Deferred decisions (flagged as open in AGENTS.md and respective docs):**
-- Reverse proxy pick (Caddy / NPM / Traefik / nginx)
+- Reverse proxy pick (Caddy / Nginx PM / Traefik / nginx)
 - S3 service pick (Garage / MinIO / Nextcloud)
 - Compute server CPU/RAM spec (affects VM sizing)
 - Per-game RAM/CPU limits in compose file

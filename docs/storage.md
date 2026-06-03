@@ -26,7 +26,7 @@ touching storage). A dedicated NAS means:
 
 TrueNAS Scale is Debian-based with native ZFS, a web UI covering pool
 management/snapshots/NFS/SMB exports, and a built-in app catalog for
-optional services (MinIO/Garage for S3, etc.). Chosen over alternatives:
+optional services (MinIO for S3, etc.). Chosen over alternatives:
 
 | Option | Why rejected |
 |---|---|
@@ -91,6 +91,10 @@ and TrueNAS doesn't manage it natively.
 | `dev` | Devbox VM disks + snapshots | 2× 2TB | Mirror | 2TB | Fixed (2 drives) |
 | `boot` | TrueNAS OS | 1–2× SSD (32GB+) | Mirror recommended | — | — |
 
+> **MinIO deployment note:** The `s3` pool backs a native MinIO TrueNAS Scale
+> app at `/mnt/s3/store`. MinIO is not part of the `media-vm` Docker Compose
+> stack.
+
 > **Note on the boot drive:** Do not use USB flash drives for the TrueNAS
 > OS. They fail under constant writes within 1–2 years. Use a cheap SSD or
 > NVMe (even 32GB). If the motherboard has M.2 slots, put TrueNAS there and
@@ -120,7 +124,7 @@ media/
   books/
 
 s3/
-  store/              ← S3 service backing store (MinIO/Garage dataset)
+  store/              ← MinIO backing store dataset
 
 dev/
   backups/            ← long-term VM snapshots exported from Proxmox
@@ -244,4 +248,3 @@ current tiny server** (`serverhub`). Rationale:
 |---|---|---|
 | Off-site backup | Backblaze B2 + rclone replication / second TrueNAS at a friend's place / none | Not blocking initial setup |
 | SMB shares | Not configured initially — NFS covers all Linux VM use cases | Add SMB later if Windows/macOS client access is needed |
-| S3 service pick | Garage / MinIO / Nextcloud | See `docs/proxmox-compute.md` open decisions |

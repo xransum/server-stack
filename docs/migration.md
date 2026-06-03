@@ -249,12 +249,15 @@ cp ~/server-stack/compose/.env.example ~/server-stack/compose/.env
 nano ~/server-stack/compose/.env
 ```
 
-### 3.5 Bring up the stack
+### 3.5 Bring up the services that can start empty
+
+Do not start Plex, Tautulli, or Overseerr yet. Their Docker volumes must be
+populated first so they do not generate fresh state that conflicts with the
+migrated data.
 
 ```bash
 cd ~/server-stack
 docker compose -f compose/docker-compose.yml \
-  --profile media \
   --profile indexers \
   --profile cloudflare-bypass \
   up -d
@@ -296,25 +299,173 @@ and rdt-client.
 > After import, verify download client paths and root folder paths inside
 > each service's UI point to `/mnt/media/...` (same path as the NFS mount).
 
-### 4.2 Verify Prowlarr custom definitions
+### 4.2 Migrate Tautulli
+
+```bash
+# Tautulli — config and watch history database
+sudo systemctl stop tautulli
+sudo rsync -avh \
+  /opt/Tautulli/ \
+  nas-ip:/mnt/dev/backups/tautulli-migration-$(date +%F)/
+
+# On media-vm
+docker volume create server-stack_tautulli-config
+docker volume inspect server-stack_tautulli-config --format '{{ .Mountpoint }}'
+sudo rsync -avh \
+  nas-ip:/mnt/dev/backups/tautulli-migration-$(date +%F)/ \
+  /var/lib/docker/volumes/server-stack_tautulli-config/_data/
+docker compose -f compose/docker-compose.yml --profile media up -d tautulli
+```
+
+After Plex is also running on `media-vm`, reconnect Tautulli to the new Plex
+instance: Settings → Plex Media Server → update host to `media-vm-ip`.
+Plex uses host networking in Docker Compose, so it is not reachable at a
+bridge-network service name.
+
+### 4.3 Migrate Overseerr
+
+Overseerr is installed as a snap on `serverhub`, not a native binary. The
+config lives at a non-standard path.
+
+```bash
+# Backup from serverhub
+sudo rsync -avh \
+  /var/snap/overseerr/current/ \
+  nas-ip:/mnt/dev/backups/overseerr-migration-$(date +%F)/
+
+# On media-vm — copy into Docker volume before starting container
+docker volume create server-stack_overseerr-config
+docker volume inspect server-stack_overseerr-config --format '{{ .Mountpoint }}'
+sudo rsync -avh \
+  nas-ip:/mnt/dev/backups/overseerr-migration-$(date +%F)/ \
+  /var/lib/docker/volumes/server-stack_overseerr-config/_data/
+docker compose -f compose/docker-compose.yml --profile media up -d overseerr
+```
+
+After starting the container, verify Sonarr/Radarr connections point at their
+Docker service names and the Plex connection points at `media-vm-ip:32400`
+because Plex uses host networking.
+
+### 4.4 Migrate ClamAV
+
+ClamAV stays native on `media-vm` rather than running in Docker.
+
+```bash
+# Copy config from serverhub to media-vm
+scp serverhub:/etc/clamav/clamd.conf /etc/clamav/clamd.conf
+scp serverhub:/etc/clamav/freshclam.conf /etc/clamav/freshclam.conf
+
+# Install on media-vm
+sudo apt install clamav clamav-daemon -y
+sudo freshclam
+sudo systemctl enable --now clamav-daemon clamav-freshclam
+```
+
+### Verify Prowlarr custom definitions
 
 Confirm the byparr-proxy indexers are loaded:
 - Prowlarr UI → Indexers — "1337x (via Byparr)" and "ThePirateBay (via Byparr)"
   should appear.
 - Run Test on each. Should pass (byparr-proxy and byparr containers are running).
 
-### 4.3 Smoke test the full pipeline
+---
 
-1. In Overseerr, request a test movie
-2. Confirm Radarr picks it up and searches via Prowlarr
-3. Confirm rdt-client receives the torrent and starts downloading
-4. Confirm the download appears at `/mnt/media/downloads/complete/`
-5. Confirm Radarr imports it to `/mnt/media/movies/`
-6. Confirm Plex picks it up
+## Phase 4.5 — Migrate Plex data
+
+Plex watch history, user profiles, ratings, playlists, and metadata all
+live in the Plex data directory. This must be copied before starting the
+new Plex container. If the new container starts fresh without this data,
+all 15+ user profiles lose their watch history permanently.
+
+**Total data size:** ~12GB
+
+### Stop Plex on serverhub
+
+```bash
+sudo systemctl stop plexmediaserver
+```
+
+Do not restart Plex on serverhub after this point.
+
+### Database notes
+
+The key Plex library databases live here:
+
+```text
+/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/
+```
+
+- `com.plexapp.plugins.library.db`
+- `com.plexapp.plugins.library.blobs.db`
+
+These databases use a custom ICU collation compiled into Plex's own SQLite
+binary. The system `sqlite3` binary cannot run `PRAGMA integrity_check` on
+them and will throw `no such collation sequence: icu_root`. That is expected
+and is not a corruption indicator. If Plex starts cleanly, the databases are
+healthy.
+
+### Copy Plex data to NAS as backup
+
+```bash
+sudo rsync -avh --progress \
+  "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/" \
+  nas-ip:/mnt/dev/backups/plex-migration-$(date +%F)/
+```
+
+### Copy Plex data into Docker volume path on media-vm
+
+```bash
+# On media-vm, create and inspect the Docker volume mountpoint
+docker volume create server-stack_plex-config
+docker volume inspect server-stack_plex-config --format '{{ .Mountpoint }}'
+# Typical output: /var/lib/docker/volumes/server-stack_plex-config/_data
+
+# Copy from NAS backup into the volume (before starting the container)
+sudo rsync -avh --progress \
+  nas-ip:/mnt/dev/backups/plex-migration-$(date +%F)/ \
+  /var/lib/docker/volumes/server-stack_plex-config/_data/
+```
+
+### Start Plex container
+
+```bash
+docker compose -f compose/docker-compose.yml --profile media up -d plex
+```
+
+Plex will read the existing database on startup and verify it internally.
+Watch logs for errors:
+
+```bash
+docker compose -f compose/docker-compose.yml logs -f plex
+```
+
+### Update library paths after Phase 5 completes
+
+The migrated database still references old media paths
+(`/mnt/raid0/media/Videos/Movies/` etc). After the Phase 5 rsync is finished,
+update in Plex UI:
+
+1. Plex Web UI → Settings → Libraries → Movies → Edit → change path to `/mnt/media/movies`
+1. Libraries → TV Shows → Edit → change path to `/mnt/media/tv`
+1. Libraries → Music → change to `/mnt/media/music`
+1. Libraries → Books → change to `/mnt/media/books`
+1. Scan all libraries. Verify counts match `serverhub`:
+   - Movies: 431 items
+   - TV Shows: 10,411 items
+
+### Verify user profiles
+
+Have one or two users confirm their watch history and continue watching
+lists are intact before decommissioning `serverhub`.
 
 ---
 
 ## Phase 5 — Migrate media data from serverhub
+
+> WARNING: The media drive on serverhub (`/dev/md0`) is 95% full — 8.2TB used
+> of 9.1TB with only 448GB free. Phase 5 (media rsync to NAS) is time-sensitive.
+> Do not add new media to serverhub after starting the migration. All new
+> requests should be paused in Overseerr until the NAS is confirmed healthy.
 
 ### 5.1 rsync media library to NAS
 
@@ -322,14 +473,16 @@ Run from serverhub (or any machine that can reach both):
 
 ```bash
 # Dry run first — verify what would be transferred
-rsync -avhn --progress \
-  /mnt/raid/media/Videos/ \
-  nas-ip:/mnt/media/
+rsync -avhn --progress /mnt/raid0/media/Videos/     nas-ip:/mnt/media/
+rsync -avhn --progress /mnt/raid0/media/Audio/      nas-ip:/mnt/media/music/
+rsync -avhn --progress /mnt/raid0/media/Ebooks/     nas-ip:/mnt/media/books/
+rsync -avhn --progress /mnt/raid0/media/Downloads/  nas-ip:/mnt/media/downloads/
 
 # Live run (may take hours depending on library size)
-rsync -avh --progress \
-  /mnt/raid/media/Videos/ \
-  nas-ip:/mnt/media/
+rsync -avh --progress /mnt/raid0/media/Videos/     nas-ip:/mnt/media/
+rsync -avh --progress /mnt/raid0/media/Audio/      nas-ip:/mnt/media/music/
+rsync -avh --progress /mnt/raid0/media/Ebooks/     nas-ip:/mnt/media/books/
+rsync -avh --progress /mnt/raid0/media/Downloads/  nas-ip:/mnt/media/downloads/
 ```
 
 > Keep serverhub running during the rsync. Services stay up. The goal is
@@ -341,9 +494,10 @@ Once the initial rsync finishes, run again with `--delete` to catch any
 new files added while it ran:
 
 ```bash
-rsync -avh --progress --delete \
-  /mnt/raid/media/Videos/ \
-  nas-ip:/mnt/media/
+rsync -avh --progress --delete /mnt/raid0/media/Videos/     nas-ip:/mnt/media/
+rsync -avh --progress --delete /mnt/raid0/media/Audio/      nas-ip:/mnt/media/music/
+rsync -avh --progress --delete /mnt/raid0/media/Ebooks/     nas-ip:/mnt/media/books/
+rsync -avh --progress --delete /mnt/raid0/media/Downloads/  nas-ip:/mnt/media/downloads/
 ```
 
 ### 5.3 Verify media on NAS
@@ -352,47 +506,68 @@ rsync -avh --progress --delete \
 # From media-vm (NFS mounted)
 ls -lh /mnt/media/movies/ | head -20
 ls -lh /mnt/media/tv/ | head -20
-
-# Check Plex can see the library
-# Plex UI → Libraries → Movies → scan
+ls -lh /mnt/media/music/ | head -20
+ls -lh /mnt/media/books/ | head -20
 ```
+
+Now complete the Plex library path update described in Phase 4.5:
+
+1. Plex Web UI → Settings → Libraries → Movies → Edit → change path to `/mnt/media/movies`
+1. Libraries → TV Shows → Edit → change path to `/mnt/media/tv`
+1. Libraries → Music → change to `/mnt/media/music`
+1. Libraries → Books → change to `/mnt/media/books`
+1. Scan all libraries. Verify counts match `serverhub`:
+   - Movies: 431 items
+   - TV Shows: 10,411 items
+
+### 5.4 Smoke test the full pipeline
+
+1. In Overseerr, request a test movie
+1. Confirm Radarr picks it up and searches via Prowlarr
+1. Confirm rdt-client receives the torrent and starts downloading
+1. Confirm the download appears at `/mnt/media/downloads/complete/`
+1. Confirm Radarr imports it to `/mnt/media/movies/`
+1. Confirm Plex picks it up
 
 ---
 
 ## Phase 6 — External access cutover
 
-### 6.1 Cloudflare Tunnel (Overseerr public access)
+### 6.1 Cloudflare Tunnel (public subdomains)
 
 1. Cloudflare Zero Trust dashboard → Tunnels → Create tunnel
 2. Name it (e.g. `homelab`)
 3. Copy the tunnel token to `compose/.env` as `CLOUDFLARE_TUNNEL_TOKEN`
 4. Start the proxy profile:
    ```bash
-   docker compose -f compose/docker-compose.yml --profile proxy up -d cloudflared
+   docker compose -f compose/docker-compose.yml --profile proxy up -d nginx-proxy-manager cloudflared
    ```
-5. In CF Zero Trust → Tunnels → your tunnel → Public Hostnames → Add:
-   - Subdomain: `overseerr`
-   - Domain: `yourdomain.com`
-   - Service: `http://media-vm-tailscale-ip:5055`
-6. Verify `https://overseerr.yourdomain.com` loads from external network
+5. In Nginx PM, create proxy hosts for:
+   - `plex.xransum.com` → `http://media-vm-ip:32400`
+   - `overseerr.xransum.com` → `http://overseerr:5055`
+6. In CF Zero Trust → Tunnels → your tunnel → Public Hostnames → Add:
+   - `plex.xransum.com` → `http://nginx-proxy-manager:80`
+   - `overseerr.xransum.com` → `http://nginx-proxy-manager:80`
+7. Verify `https://plex.xransum.com` and `https://overseerr.xransum.com`
+   load from an external network
 
-### 6.2 Reverse proxy (internal subdomain routing)
+### 6.2 Nginx PM (internal subdomain routing)
 
-> **Open decision:** Caddy / Nginx Proxy Manager / Traefik / nginx.
-> Complete this step once the reverse proxy choice is made.
-> See `docs/proxmox-compute.md` open decisions.
+Use Nginx PM for all internal service routing on `xransum.com`.
 
-After picking and deploying the reverse proxy, configure:
-
-| Subdomain | Target |
-|---|---|
-| `plex.home` | `http://plex:32400` |
-| `sonarr.home` | `http://sonarr:8989` |
-| `radarr.home` | `http://radarr:7878` |
-| `prowlarr.home` | `http://prowlarr:9696` |
-| `overseerr.home` | `http://overseerr:5055` |
-
-TLS via Cloudflare DNS-01 challenge for a wildcard cert (`*.home` or `*.yourdomain.com`).
+1. Access the admin UI at `http://media-vm-tailscale-ip:81`
+1. Create proxy hosts for the internal services documented in
+   `docs/proxmox-compute.md`:
+   - `sonarr.xransum.com`
+   - `radarr.xransum.com`
+   - `prowlarr.xransum.com`
+   - `tautulli.xransum.com`
+   - `rdt.xransum.com`
+   - `nas.xransum.com`
+   - `proxmox.xransum.com`
+   - `npm.xransum.com`
+1. Use a Let's Encrypt wildcard cert for `*.xransum.com` via Cloudflare DNS-01
+   for the Tailscale-only hosts
 
 ---
 
@@ -401,9 +576,10 @@ TLS via Cloudflare DNS-01 challenge for a wildcard cert (`*.home` or `*.yourdoma
 Run these from a device **off your LAN** (phone on mobile data, laptop at coffee shop):
 
 - [ ] Tailscale connected → SSH to `devbox` hostname works
-- [ ] Tailscale connected → `http://sonarr.home` (or `http://media-vm-ts-ip:8989`) loads
-- [ ] Tailscale connected → `http://prowlarr.home` loads, indexer Tests pass
-- [ ] `https://overseerr.yourdomain.com` loads (CF Tunnel, no Tailscale needed)
+- [ ] Tailscale connected → `https://sonarr.xransum.com` loads
+- [ ] Tailscale connected → `https://prowlarr.xransum.com` loads, indexer Tests pass
+- [ ] `https://plex.xransum.com` loads (CF Tunnel, no Tailscale needed)
+- [ ] `https://overseerr.xransum.com` loads (CF Tunnel, no Tailscale needed)
 - [ ] Request a test item in Overseerr → full pipeline runs → Plex picks it up
 - [ ] Byparr proxy: `curl http://media-vm-ts-ip:8882/precompiled/data_top100_recent.json` returns JSON
 
@@ -448,3 +624,29 @@ Since serverhub and the NAS run independently, rolling back is safe at
 any point before Phase 8. The media data on NAS is read-only from
 serverhub's perspective after the rsync — serverhub's local copy remains
 intact until explicitly removed.
+
+---
+
+## Security notes
+
+- **Cloudflare Tunnel token**: The old `serverhub` `cloudflared` service file
+  contains the tunnel token in plain text at
+  `/etc/systemd/system/cloudflared.service`. Generate a new tunnel token for
+  `media-vm` in the Cloudflare Zero Trust dashboard. Revoke the old token
+  after the new tunnel is confirmed working. Never reuse the old token.
+
+- **API keys**: Regenerate all API keys after migration. Do not copy
+  `serverhub` API keys into the new stack.
+  - Radarr: Settings → General → Security → API Key → Regenerate
+  - Sonarr: same path
+  - Prowlarr: same path
+  - Update `queue-cleaner.env` and decluttarr environment with the new keys.
+
+- **queue-cleaner.env**: Contains API keys in plain text. Never commit this
+  file to git. Store only at `/etc/queue-cleaner.env` on the server with
+  `chmod 600 /etc/queue-cleaner.env`. The repo `.gitignore` should exclude
+  runtime `*.env` files.
+
+- **Cloudflare Tunnel token in .env**: The `compose/.env` file will contain
+  `CLOUDFLARE_TUNNEL_TOKEN`. Verify this file stays out of git and is never
+  committed.
