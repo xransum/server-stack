@@ -9,6 +9,47 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-08-08 — rdt-blocklist service added; path typos fixed
+
+**Context:** Observed live on serverhub that when Real-Debrid rejects a
+torrent hash as infringing, rdt-client records the error in its database but
+reports the download as healthy to Sonarr/Radarr (`status=warning,
+trackedDownloadStatus=ok`). The item sits in the queue indefinitely; no
+alternative release is grabbed. Manually blocklisting and re-searching was
+required each time.
+
+**Root cause:** rdt-client does not propagate a failure signal back to the
+*arr download client API when the provider error occurs. Sonarr/Radarr never
+see a failed state. queue-cleaner catches a related but later-stage failure
+(zero-size warning items); the infringing case sometimes never reaches that
+stage.
+
+**Decision:** Add `rdt-blocklist` — a new long-running sidecar that polls the
+rdt-client SQLite database directly every 2 minutes, matches stuck rows against
+the Sonarr/Radarr queue by title, blocklists the matched queue item (with
+`removeFromClient=true, blocklist=true`), triggers a fresh episode/movie
+search, and deletes the stuck database row. Both queue-cleaner and
+rdt-blocklist can run simultaneously — they target different failure stages.
+
+Observed catching and auto-resolving infringing releases for Widows Bay
+S01E01 within seconds of the error appearing in the rdt-client database.
+
+**Files added:**
+- `scripts/rdt-blocklist.py` — stdlib-only polling daemon
+- `scripts/rdt-blocklist.env.example`
+- `services/rdt-blocklist.service` — persistent systemd unit (not a timer)
+- `docker/rdt-blocklist/Dockerfile`
+- `docker/rdt-blocklist/example.env`
+- `docs/rdt-blocklist.md`
+- compose: `rdt-blocklist` service added to `indexers` profile
+
+**Also fixed:** `/mnt/raid/media/` corrected to `/mnt/raid0/media/` across
+`docs/radarr.md`, `docs/sonarr.md`, `docs/permissions.md`, `docs/clamav.md`,
+and `docs/rdt-client.md`. The live server mount point was always `raid0` but
+the docs had a stale path.
+
+---
+
 ## 2026-06-02 — Hardware finalized, open decisions resolved
 
 **Context:** Extended planning session covering NAS hardware ordering,

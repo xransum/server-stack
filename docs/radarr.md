@@ -6,7 +6,7 @@ Movie management and automation. Radarr monitors for new movies, searches indexe
 - **Runs as**: `media` system user
 - **Install path**: `/opt/Radarr`
 - **Config/database**: `/var/lib/radarr`
-- **Media root**: `/mnt/raid/media/Videos/Movies`
+- **Media root**: `/mnt/raid0/media/Videos/Movies`
 
 ## Prerequisites
 
@@ -76,7 +76,7 @@ Open `http://localhost:7878` in your browser.
 
 ### Root Folder
 
-- Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid/media/Videos/Movies`
+- Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid0/media/Videos/Movies`
 
 ### ClamAV Integration
 

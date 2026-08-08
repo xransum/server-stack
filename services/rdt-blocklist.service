@@ -1,0 +1,16 @@
+[Unit]
+Description=RDT auto-blocklist for Sonarr and Radarr
+After=network-online.target rdt-client.service sonarr.service radarr.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=media
+Group=media
+EnvironmentFile=/etc/rdt-blocklist.env
+ExecStart=/usr/bin/python3 /opt/rdt-blocklist/rdt-blocklist.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

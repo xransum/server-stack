@@ -5,9 +5,9 @@ Real-Debrid download client. rdt-client acts as a qBittorrent-compatible API tha
 - **Port**: 6500
 - **Runs as**: `media` system user
 - **Install path**: `/opt/rdt-client`
-- **Downloads**: `/mnt/raid/media/Downloads`
-- **Database**: `/mnt/raid/media/Downloads/rdtclient.db`
-- **Logs**: `/mnt/raid/media/Downloads/rdtclient.log`
+- **Downloads**: `/mnt/raid0/media/Downloads`
+- **Database**: `/mnt/raid0/media/Downloads/rdtclient.db`
+- **Logs**: `/mnt/raid0/media/Downloads/rdtclient.log`
 
 ## Prerequisites
 
@@ -36,8 +36,8 @@ rm /tmp/rdt-client.zip
 Create the download directories and set permissions:
 
 ```bash
-sudo mkdir -p /mnt/raid/media/Downloads/radarr /mnt/raid/media/Downloads/sonarr
-sudo chown -R media:media /mnt/raid/media/Downloads
+sudo mkdir -p /mnt/raid0/media/Downloads/radarr /mnt/raid0/media/Downloads/sonarr
+sudo chown -R media:media /mnt/raid0/media/Downloads
 ```
 
 ## Application Settings
@@ -50,13 +50,13 @@ Create `/opt/rdt-client/appsettings.json`:
 {
   "Logging": {
     "File": {
-      "Path": "/mnt/raid/media/Downloads/rdtclient.log",
+      "Path": "/mnt/raid0/media/Downloads/rdtclient.log",
       "FileSizeLimitBytes": 5242880,
       "MaxRollingFiles": 5
     }
   },
   "Database": {
-    "Path": "/mnt/raid/media/Downloads/rdtclient.db"
+    "Path": "/mnt/raid0/media/Downloads/rdtclient.db"
   },
   "Port": "6500",
   "BasePath": null
@@ -92,8 +92,8 @@ Create a local login account on the first visit.
 
 ### Download Client
 
-- Settings -> Download Client -> set download path to `/mnt/raid/media/Downloads`
-- Settings -> Download Client -> set mapped path to `/mnt/raid/media/Downloads` (same as download path since this is not a Docker setup)
+- Settings -> Download Client -> set download path to `/mnt/raid0/media/Downloads`
+- Settings -> Download Client -> set mapped path to `/mnt/raid0/media/Downloads` (same as download path since this is not a Docker setup)
 - Settings -> Download Client -> set downloader to `Bezzad` (not Symlink, which requires an rclone mount)
 
 ### Exclude Junk Files
@@ -130,7 +130,7 @@ After extracting, re-create `appsettings.json` (see [Application Settings](#appl
 sudo systemctl start rdt-client
 ```
 
-The database at `/mnt/raid/media/Downloads/rdtclient.db` is preserved since it lives outside the install directory.
+The database at `/mnt/raid0/media/Downloads/rdtclient.db` is preserved since it lives outside the install directory.
 
 ## Troubleshooting
 

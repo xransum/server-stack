@@ -8,7 +8,7 @@ Plex runs as its own user but is added to the `media` group so it can read the l
 ## Create the media user
 
 ```bash
-sudo useradd -r -s /bin/false -d /mnt/raid/media media
+sudo useradd -r -s /bin/false -d /mnt/raid0/media media
 ```
 
 ## Add your personal user and Plex to the media group
@@ -23,17 +23,17 @@ Log out and back in for the group change to take effect on your session.
 ## Create the directory structure
 
 ```bash
-sudo mkdir -p /mnt/raid/media/Videos/Movies
-sudo mkdir -p "/mnt/raid/media/Videos/TV Shows"
-sudo mkdir -p /mnt/raid/media/Downloads/radarr
-sudo mkdir -p /mnt/raid/media/Downloads/sonarr
+sudo mkdir -p /mnt/raid0/media/Videos/Movies
+sudo mkdir -p "/mnt/raid0/media/Videos/TV Shows"
+sudo mkdir -p /mnt/raid0/media/Downloads/radarr
+sudo mkdir -p /mnt/raid0/media/Downloads/sonarr
 ```
 
 ## Set ownership
 
 ```bash
-sudo chown -R media:media /mnt/raid/media/Downloads
-sudo chown -R media:media /mnt/raid/media/Videos
+sudo chown -R media:media /mnt/raid0/media/Downloads
+sudo chown -R media:media /mnt/raid0/media/Videos
 sudo chown -R media:media /var/lib/sonarr
 sudo chown -R media:media /var/lib/radarr
 sudo chown -R media:media /var/lib/prowlarr
@@ -54,6 +54,6 @@ ps aux | grep -E "Sonarr|Radarr|dotnet"
 Download and library directories should be owned by `media`:
 
 ```bash
-ls -la /mnt/raid/media/Downloads/
-ls -la /mnt/raid/media/Videos/
+ls -la /mnt/raid0/media/Downloads/
+ls -la /mnt/raid0/media/Videos/
 ```

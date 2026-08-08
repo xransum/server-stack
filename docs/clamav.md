@@ -114,7 +114,7 @@ clamscan /path/to/file.mkv
 Scan an entire directory:
 
 ```bash
-clamscan -r /mnt/raid/media/Videos/Movies
+clamscan -r /mnt/raid0/media/Videos/Movies
 ```
 
 ## Notes

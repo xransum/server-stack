@@ -164,6 +164,24 @@ services:
       - sonarr
       - radarr
 
+  rdt-blocklist:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/rdt-blocklist/Dockerfile
+    image: server-stack/rdt-blocklist:local
+    profiles: [indexers]
+    container_name: rdt-blocklist
+    env_file:
+      - ${RDT_BLOCKLIST_ENV:-./rdt-blocklist.env}
+    volumes:
+      # Mount the rdt-client database read-only. Must be on the same NFS mount.
+      - /mnt/media/downloads:/mnt/media/downloads:ro
+    depends_on:
+      - rdt-client
+      - sonarr
+      - radarr
+
   # ---------------------------------------------------------------------------
   # CLOUDFLARE-BYPASS profile
   # ---------------------------------------------------------------------------

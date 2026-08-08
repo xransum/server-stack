@@ -6,7 +6,7 @@ TV show management and automation. Sonarr monitors for new episodes, searches in
 - **Runs as**: `media` system user
 - **Install path**: `/opt/Sonarr`
 - **Config/database**: `/var/lib/sonarr`
-- **Media root**: `/mnt/raid/media/Videos/TV Shows`
+- **Media root**: `/mnt/raid0/media/Videos/TV Shows`
 
 ## Prerequisites
 
@@ -57,7 +57,7 @@ Open `http://localhost:8989` in your browser.
 
 ### Root Folder
 
-- Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid/media/Videos/TV Shows`
+- Settings -> Media Management -> Root Folders -> Add -> `/mnt/raid0/media/Videos/TV Shows`
 
 ### ClamAV Integration
 
@@ -103,13 +103,13 @@ If files are in the downloads folder but Sonarr is not importing them:
 1. Check that the `media` user owns the downloads directory:
 
 ```bash
-ls -la /mnt/raid/media/Downloads/sonarr/
+ls -la /mnt/raid0/media/Downloads/sonarr/
 ```
 
 2. Use Manual Import as a fallback:
 
 - Sonarr -> Wanted -> Manual Import
-- Point it at `/mnt/raid/media/Downloads/sonarr`
+- Point it at `/mnt/raid0/media/Downloads/sonarr`
 - Match the files to episodes and import them
 
 ### No Indexers Available
