@@ -10,7 +10,7 @@ prices and links where available.
 | Node | Status | Notes |
 |---|---|---|
 | NAS | ORDER PLACED | All parts ordered May/Jun 2026 |
-| Compute | WAITING | Waiting on DDR5 prices to drop to ~$450-500 for 64GB kit |
+| Compute | ORDER PLACED | All parts ordered Oct 2026 — $2,956.78 total |
 | Network | DEFERRED | Buy after apartment move-in, layout confirmed |
 
 ---
@@ -53,38 +53,22 @@ prices and links where available.
 
 ---
 
-## Compute Node — WAITING ON DDR5
+## Compute Node — ORDERED ($2,956.78 total)
 
-Platform-agnostic parts can be ordered anytime. Platform-dependent parts
-wait until 64GB DDR5-6400 drops to ~$450-500 (currently $829 as of Jun 2026).
-
-### Price alerts to set
-
-| Item | Current price | Alert target |
-|---|---|---|
-| Acer Predator Pallas II 64GB DDR5-6400 (BL.9BWWR.437) | $829 | $500 |
-| AMD Ryzen 9 7950X3D | $389 | $340 |
-
-Set alerts at camelcamelcamel.com for Amazon price drops.
-
-### Platform-agnostic parts (order anytime)
+All parts ordered Oct 2026 via Amazon. PSU sourced from spare Seasonic GX-850W
+(originally purchased for NAS, second unit used here — not in total above).
 
 | Part | Qty | Price | Notes |
 |---|---|---|---|
-| Fractal Design Define 7 XL (solid black) | 1 | $240.00 | Same case as NAS |
-| Seasonic Focus GX-1000W ATX 3.1 | 1 | $178.00 | 1000W for 7950X3D + RTX 2070 headroom |
-| 10Gtek X550-AT2 10GbE NIC | 1 | $93.99 | Same NIC as NAS |
-| WD Green SN350 250GB NVMe | 1 | $73.99 | Proxmox OS boot drive |
-| Samsung 990 Pro 2TB NVMe | 1 | $389.00 | VM disk images |
-
-### Platform-dependent parts (wait for DDR5)
-
-| Part | Qty | Current Price | Notes |
-|---|---|---|---|
-| AMD Ryzen 9 7950X3D | 1 | $389.00 | 16c/32t, 5.7GHz boost, 3D V-Cache, AM5 |
-| ASUS ProArt X870E-CREATOR WiFi | 1 | $494.00 | AM5, PCIe 5.0, 4x M.2, 10Gb onboard LAN |
-| Acer Predator Pallas II 64GB DDR5-6400 | 1 | $829.00 | 2x32GB kit, WAITING on price drop |
-| AM5 CPU cooler | 1 | ~$80-100 | TBD when platform locked |
+| Fractal Design Define 7 XL (solid black) | 1 | $239.99 | Same case as NAS |
+| ASUS ProArt X870E-CREATOR WiFi | 1 | $506.99 | AM5, PCIe 5.0, 4x M.2, 10Gb onboard LAN |
+| AMD Ryzen 9 7950X3D | 1 | $579.95 | 16c/32t, 5.7GHz boost, 3D V-Cache, AM5 |
+| G.Skill Trident Z5 RGB 64GB DDR5-6000 CL36 (2x32GB) | 1 | $989.99 | White. DDR5-6000 CL36, better availability than original DDR5-6400 spec |
+| Noctua NH-D15 G2 chromax.Black | 1 | $169.90 | AM5, dual-tower air cooler |
+| Samsung 990 Pro 2TB NVMe | 1 | $389.99 | VM disk images |
+| WD Green SN350 250GB NVMe | 1 | $79.97 | Proxmox OS boot drive |
+| Seasonic Focus GX-850W ATX 3.1 | 1 | $0.00 | Spare unit from NAS order — not purchased separately |
+| 10Gtek X550-AT2 10GbE NIC | 1 | $93.99 | Same NIC as NAS — still needed, not in Amazon order |
 
 ### Free from serverhub (pull after decommission)
 
