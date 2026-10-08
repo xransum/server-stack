@@ -172,7 +172,7 @@ echo 'PASSWORD' | sudo -S -p '' cp /tmp/file /dest/file
 |---|---|---|
 | Reverse proxy | Nginx Proxy Manager (Nginx PM) | Web UI, easy SSL via Let's Encrypt Cloudflare DNS-01 challenge, Docker-native workflow. |
 | S3 service | MinIO on TrueNAS Scale | Runs as a native app backed by `/mnt/s3/store`; works with AWS CLI, rclone, and standard S3 SDKs. |
-| Compute server CPU/RAM | AMD Ryzen 9 7950X3D + 64GB DDR5-6400 | Wait for the 64GB kit to hit the $450-500 target before ordering RAM; the rest of the compute parts are confirmed. |
+| Compute server CPU/RAM | AMD Ryzen 9 7950X3D + 64GB G.Skill DDR5-6000 CL36 | Ordered Oct 2026. Full BOM and prices in `docs/homelab-hardware.md`. |
 | Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing; do not buy a MikroTik router. |
 | Domain | `xransum.com` | Homelab services live here. `kevin-haas.com` stays pointed at GitHub Pages for the blog. |
 

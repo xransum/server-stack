@@ -36,15 +36,16 @@ in a cloud VM.
 
 ## VM layout
 
-> **Compute server hardware (confirmed, pending DDR5 price drop):**
+> **Compute server hardware (ordered Oct 2026 -- see `docs/homelab-hardware.md`):**
 > - CPU: AMD Ryzen 9 7950X3D (AM5, 16c/32t, 5.7GHz boost, 3D V-Cache)
 > - Motherboard: ASUS ProArt X870E-CREATOR WiFi
-> - RAM: 64GB DDR5-6400 (waiting for price to drop from $829 to ~$450-500)
+> - RAM: 64GB G.Skill Trident Z5 DDR5-6000 CL36 (2x32GB)
+> - Cooler: Noctua NH-D15 G2 chromax.Black (AM5)
 > - GPU: NVIDIA RTX 2070 (PCIe passthrough to media-vm, moved from serverhub)
 > - Boot NVMe: WD Green SN350 250GB (Proxmox OS)
 > - VM NVMe: Samsung 990 Pro 2TB (VM disk images)
 > - Network: 10Gtek X550-AT2 10GbE NIC
-> - PSU: Seasonic Focus GX-1000W ATX 3.1
+> - PSU: Seasonic Focus GX-850W ATX 3.1 (spare unit from NAS order)
 >
 > GPU passthrough: RTX 2070 supports NVENC for Plex (4-6 simultaneous 1080p
 > transcodes). 4K HDR -> 1080p SDR tone-mapped transcodes are supported
@@ -431,7 +432,7 @@ for Tailscale-accessible subdomains.
 
 | Decision | Resolution | Notes |
 |---|---|---|
-| Compute server CPU/RAM | Ryzen 9 7950X3D (AM5) + 64GB DDR5-6400 | Wait for the DDR5 kit to drop to the $450-500 target before ordering. |
+| Compute server CPU/RAM | Ryzen 9 7950X3D (AM5) + 64GB G.Skill DDR5-6000 CL36 | Ordered Oct 2026. See `docs/homelab-hardware.md` for the full BOM and prices. |
 | Reverse proxy | Nginx Proxy Manager (Nginx PM) | `jc21/nginx-proxy-manager` in `compose/docker-compose.yml`. |
 | S3 service | MinIO on TrueNAS Scale | Native app backed by `/mnt/s3/store`; not part of the media-vm compose stack. |
 | Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing. |
