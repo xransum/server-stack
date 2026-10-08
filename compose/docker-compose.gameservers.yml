@@ -1,26 +1,41 @@
-# Docker Compose — gameservers-vm stack
+# Docker Compose -- gameservers-vm stack (Pelican)
 #
 # Target: gameservers-vm on Proxmox compute server (separate VM from media-vm).
-# Status: UNTESTED — awaiting lab hardware.
+# Status: UNTESTED -- awaiting lab hardware.
 #
 # This stack runs independently of docker-compose.yml (different VM).
-# Start specific game servers on demand via profiles:
 #
-#   docker compose -f docker-compose.gameservers.yml --profile minecraft up -d
-#   docker compose -f docker-compose.gameservers.yml --profile valheim up -d
+# Game servers are managed by Pelican (the actively maintained Beta successor
+# to Pterodactyl), not by per-game compose services. Pelican has two parts:
 #
-# World saves and persistent data live on NAS NFS mount.
-# Add to /etc/fstab on gameservers-vm:
-#   nas-ip:/mnt/dev/gameservers  /mnt/gameservers  nfs  rw,sync,hard,intr  0 0
+#   - Panel: the web UI + API (this compose stack).
+#   - Wings: the node daemon that runs each game server in its own Docker
+#     container from a Pelican "egg". Wings needs the host Docker socket and a
+#     full kernel, which is why gameservers-vm is a KVM VM, not an LXC.
 #
-# Archive workflow:
-#   1. Stop container: docker compose ... stop <service>
-#   2. On NAS: zfs snapshot pool/dev/gameservers/<game>@<name>
-#   3. Container can be removed — world is safe on NAS
-#   4. Restore: start container again (same NFS mount path, same data)
+# You do NOT define one compose service per game here. Each game is created in
+# the Panel UI from an egg, and Wings spins up its container on demand. See
+# docs/proxmox-compute.md "Game server workflow" and docs/migration.md Phase
+# 5.5 for the migration/import flow.
 #
-# Per-game resource limits (deploy.resources.limits) are TODO — fill in
-# when standing up each game server. Starting estimates noted per service.
+# Storage model:
+#   - Live worlds run on the gameservers-vm LOCAL disk (Wings data dir below).
+#     Running live game state over NFS risks SQLite/world-file corruption and
+#     latency, so it stays local.
+#   - Durability comes from Pelican scheduled backups pushed to the NAS
+#     dev/gameservers dataset, mounted as a BACKUP TARGET (not a live mount):
+#       nas-ip:/mnt/dev/gameservers  /mnt/gameservers  nfs  rw,sync,hard,intr  0 0
+#     The NAS also keeps ZFS snapshots of that dataset (7d / 4w) as a second
+#     independent restore path.
+#
+# Per-game resource limits are set on each Pelican server when it is created.
+# Starting estimates (fill in per modpack when standing up each game):
+#   Minecraft Java (PaperMC)  cpus 4   mem 8-12G   port 25565/tcp
+#   Minecraft Bedrock         cpus 2   mem 4G      port 19132/udp
+#   Valheim                   cpus 4   mem 4-8G    ports 2456-2457/udp
+#   Palworld                  cpus 8   mem 8-16G   ports 8211,27015/udp
+#   Counter-Strike 2          cpus 4   mem 2-6G    port 27015/tcp+udp
+#   (plus any existing serverhub engine: Rust, Satisfactory, Factorio, 7DtD)
 
 name: gameservers
 
@@ -29,177 +44,82 @@ x-restart: &restart-policy
 
 services:
 
-  # ---------------------------------------------------------------------------
-  # Management UI (always-on, no profile — manages all game servers)
-  # ---------------------------------------------------------------------------
-
-  pterodactyl-panel:
+  # Pelican Panel -- web UI + API. Always-on, reverse-proxied via Nginx PM
+  # (pelican.xransum.com through Cloudflare Tunnel; see docs/proxmox-compute.md).
+  panel:
     <<: *restart-policy
-    # Pterodactyl has a panel + wings (daemon) architecture.
-    # Panel is the web UI; Wings runs on the same host and manages containers.
-    # See https://pterodactyl.io/panel/1.0/getting_started.html
-    # Full setup is more involved than a single docker-compose service —
-    # leaving as a reference placeholder. Consider Pelican (Pterodactyl fork
-    # with simpler Docker setup) as an alternative.
-    image: ghcr.io/pterodactyl/panel:latest
-    container_name: pterodactyl-panel
+    image: ghcr.io/pelican-dev/panel:latest
+    container_name: pelican-panel
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - pterodactyl-panel-config:/app/var
-      - pterodactyl-panel-logs:/app/storage/logs
     environment:
-      APP_URL: http://localhost   # update with actual subdomain when reverse proxy is configured
+      APP_URL: ${PELICAN_APP_URL:-http://localhost}
       APP_TIMEZONE: America/New_York
-      DB_PASSWORD: ${PTERODACTYL_DB_PASSWORD}
-      HASHIDS_SALT: ${PTERODACTYL_HASHIDS_SALT}
-    # TODO: requires a MySQL/MariaDB container and a Redis container alongside
-    # this service. See Pterodactyl docs for full compose setup.
-
-  # ---------------------------------------------------------------------------
-  # Minecraft Java — profile: minecraft
-  # ---------------------------------------------------------------------------
-
-  minecraft-java:
-    <<: *restart-policy
-    image: itzg/minecraft-server:latest
-    profiles: [minecraft]
-    container_name: minecraft-java
-    environment:
-      EULA: "TRUE"
-      TYPE: PAPER             # PaperMC — best performance. Change to FORGE/FABRIC for modded.
-      VERSION: LATEST
-      MEMORY: 8G              # TODO: adjust per modpack. Vanilla: 4G, heavy modpack: 12-16G
-      ONLINE_MODE: "true"
-      MOTD: "Home Server"
-      TZ: America/New_York
+      # Panel DB/cache point at the sibling services below.
+      DB_CONNECTION: mariadb
+      DB_HOST: panel-db
+      DB_PORT: "3306"
+      DB_DATABASE: panel
+      DB_USERNAME: pelican
+      DB_PASSWORD: ${PELICAN_DB_PASSWORD}
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: panel-cache
     volumes:
-      - /mnt/gameservers/minecraft-java:/data
-    ports:
-      - "25565:25565"
-    # TODO: resource limits — set once you know your modpack requirements
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "4"
-    #       memory: 10G
+      - pelican-panel-data:/pelican-data
+      - pelican-panel-logs:/var/www/html/storage/logs
+    depends_on:
+      - panel-db
+      - panel-cache
 
-  # ---------------------------------------------------------------------------
-  # Minecraft Bedrock — profile: minecraft-bedrock
-  # ---------------------------------------------------------------------------
-
-  minecraft-bedrock:
+  panel-db:
     <<: *restart-policy
-    image: itzg/minecraft-bedrock-server:latest
-    profiles: [minecraft-bedrock]
-    container_name: minecraft-bedrock
+    image: mariadb:11
+    container_name: pelican-panel-db
     environment:
-      EULA: "TRUE"
-      TZ: America/New_York
+      MARIADB_DATABASE: panel
+      MARIADB_USER: pelican
+      MARIADB_PASSWORD: ${PELICAN_DB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
     volumes:
-      - /mnt/gameservers/minecraft-bedrock:/data
-    ports:
-      - "19132:19132/udp"
-    # TODO: resource limits
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "2"
-    #       memory: 4G
+      - pelican-panel-db:/var/lib/mysql
 
-  # ---------------------------------------------------------------------------
-  # Valheim — profile: valheim
-  # ---------------------------------------------------------------------------
-
-  valheim:
+  panel-cache:
     <<: *restart-policy
-    image: lloesche/valheim-server:latest
-    profiles: [valheim]
-    container_name: valheim
-    cap_add:
-      - SYS_NICE
-    environment:
-      SERVER_NAME: "Home Server"
-      WORLD_NAME: ${VALHEIM_WORLD_NAME:-Dedicated}
-      SERVER_PASS: ${VALHEIM_SERVER_PASS}
-      TZ: America/New_York
-      BACKUPS: "false"   # Backups handled by ZFS snapshot on NAS
+    image: redis:7-alpine
+    container_name: pelican-panel-cache
     volumes:
-      - /mnt/gameservers/valheim/config:/config
-      - /mnt/gameservers/valheim/data:/opt/valheim
-    ports:
-      - "2456-2457:2456-2457/udp"
-    # TODO: resource limits — Valheim dedicated ~4-6GB RAM
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "4"
-    #       memory: 8G
+      - pelican-panel-cache:/data
 
-  # ---------------------------------------------------------------------------
-  # Palworld — profile: palworld
-  # ---------------------------------------------------------------------------
-
-  palworld:
+  # Pelican Wings -- node daemon. Runs each game server as its own container.
+  # Requires the host Docker socket and host networking. Register this node in
+  # the Panel after first start (Panel -> Nodes -> create, then drop the
+  # generated config into /etc/pelican/config.yml).
+  wings:
     <<: *restart-policy
-    image: thijsvanloef/palworld-server-docker:latest
-    profiles: [palworld]
-    container_name: palworld
+    image: ghcr.io/pelican-dev/wings:latest
+    container_name: pelican-wings
+    network_mode: host
+    tty: true
     environment:
-      PUID: "1000"
-      PGID: "1000"
-      PORT: "8211"
-      PLAYERS: "16"
-      MULTITHREADING: "true"
-      COMMUNITY: "false"
-      SERVER_NAME: "Home Server"
-      SERVER_PASSWORD: ${PALWORLD_SERVER_PASSWORD:-}
       TZ: America/New_York
+      WINGS_UID: "988"
+      WINGS_GID: "988"
     volumes:
-      - /mnt/gameservers/palworld:/palworld/Pal/Saved
-    ports:
-      - "8211:8211/udp"
-      - "27015:27015/udp"
-    # TODO: resource limits — Palworld dedicated ~8-16GB RAM under load
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "8"
-    #       memory: 16G
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/pelican:/etc/pelican
+      - /var/lib/pelican:/var/lib/pelican        # live game server data (LOCAL disk)
+      - /var/log/pelican:/var/log/pelican
+      - /tmp/pelican:/tmp/pelican
+      - /mnt/gameservers:/mnt/gameservers         # NAS backup target (Pelican backups)
 
-  # ---------------------------------------------------------------------------
-  # CS2 / Source engine games — profile: cs2
-  # ---------------------------------------------------------------------------
-
-  cs2:
-    <<: *restart-policy
-    image: joedwards32/cs2:latest
-    profiles: [cs2]
-    container_name: cs2
-    environment:
-      SRCDS_TOKEN: ${CS2_SRCDS_TOKEN}   # Get from https://steamcommunity.com/dev/managegameservers
-      CS2_SERVERNAME: "Home Server"
-      CS2_CHEATS: "0"
-      CS2_PORT: "27015"
-      CS2_MAXPLAYERS: "10"
-      CS2_LAN: "0"
-      TZ: America/New_York
-    volumes:
-      - /mnt/gameservers/cs2:/home/steam/cs2-dedicated
-    ports:
-      - "27015:27015/tcp"
-      - "27015:27015/udp"
-    # TODO: resource limits — CS2 dedicated ~2-4GB RAM
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "4"
-    #       memory: 6G
-
-# ---------------------------------------------------------------------------
-# Named volumes (panel config/DB only — game data lives on NAS NFS)
-# ---------------------------------------------------------------------------
+# Named volumes hold Panel config/DB/cache only. Live game-server data lives on
+# the local disk via Wings' /var/lib/pelican bind mount above; backups go to the
+# NAS via /mnt/gameservers.
 volumes:
-  pterodactyl-panel-config:
-  pterodactyl-panel-logs:
+  pelican-panel-data:
+  pelican-panel-logs:
+  pelican-panel-db:
+  pelican-panel-cache:

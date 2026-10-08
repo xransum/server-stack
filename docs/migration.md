@@ -5,8 +5,9 @@ Compose stack on Proxmox. Each phase is independently checkable. Do not
 skip ahead — later phases depend on earlier ones being verified.
 
 **Current state:** everything runs as native systemd on `serverhub`
-(192.168.1.166, Debian 12). Target: NAS + Proxmox compute, services
-running in `media-vm` via Docker Compose.
+(192.168.1.166, Debian 12). Target: NAS + Proxmox compute, with the media
+stack running in `media-vm` via Docker Compose and game servers running in
+`gameservers-vm` under Pelican (Panel + Wings). See `docs/proxmox-compute.md`.
 
 ---
 
@@ -17,6 +18,10 @@ Before starting any phase, confirm:
 - [ ] All services healthy on `serverhub` (`sudo systemctl status radarr sonarr prowlarr rdt-client byparr 'byparr-proxy@*'`)
 - [ ] Prowlarr indexer Test passing for all active indexers
 - [ ] Sonarr/Radarr import queue empty (no pending items mid-import)
+- [ ] Game servers enumerated fresh (see Phase 5.5.1) -- capture the current
+      list of game users, world/save dirs, and systemd units so Phase 5.5 has
+      an up-to-date checklist (the inventory may have grown since this doc was
+      written)
 - [ ] Latest commits pulled on `serverhub` (`git pull` in `~/Documents/Gits/server-stack`)
 
 ---
@@ -531,6 +536,103 @@ Now complete the Plex library path update described in Phase 4.5:
 
 ---
 
+## Phase 5.5 -- Migrate game servers
+
+Game servers move to `gameservers-vm` under **Pelican** (Panel + Wings). They
+are **on-demand**: started manually when wanted, never all at once (not enough
+RAM to run them concurrently). This phase stages every existing world off
+`serverhub`, re-creates each game as a Pelican server, and imports the worlds.
+
+> **Inventory-agnostic by design.** Do NOT rely on any hardcoded list in this
+> doc. New servers may be added to `serverhub` right up until the final build.
+> Every step below **enumerates what is actually on the box at migration time**
+> and copies whole home trees wholesale, so anything added between now and
+> cutover is captured automatically.
+
+Game-server data lives under per-user home directories on `serverhub` (one
+system user per engine, e.g. `minecraft`, `steam`). In the new build, live
+worlds run on the `gameservers-vm` local disk (Wings data dir) and Pelican
+pushes scheduled backups to the NAS `dev/gameservers` dataset. The NAS copy is
+both the migration staging area and the ongoing backup target.
+
+### 5.5.1 Snapshot the live inventory (do this at cutover, not before)
+
+```bash
+# On serverhub -- discover every game-server user and what they hold.
+# Adjust the user list if you have added engines beyond these.
+for u in minecraft steam; do
+  echo "===== $u ====="
+  getent passwd "$u" >/dev/null || { echo "  (no such user, skip)"; continue; }
+  home=$(getent passwd "$u" | cut -d: -f6)
+  sudo du -sh "$home" 2>/dev/null
+  sudo du -sh "$home"/*/ 2>/dev/null
+done
+
+# Discover every game-related systemd unit (templates, instances, enabled state)
+systemctl list-unit-files | grep -iE 'minecraft|steam|valheim|rust|palworld|satisfactory|factorio|7days|ark|game'
+# Capture which instances have ever been started (template units)
+systemctl list-units --all | grep -iE 'minecraft@|game'
+```
+
+Save that output alongside the migration -- it is the checklist you verify
+against on the other side.
+
+### 5.5.2 Stage all game-server data to the NAS (wholesale)
+
+Copy the **entire** home tree for each game user to the NAS staging area. This
+guarantees worlds, configs, mods, server.properties, allowlists, and anything
+else come along -- no per-game cherry-picking that could miss a file.
+
+```bash
+# On serverhub -- one rsync per game user, whole home tree.
+for u in minecraft steam; do
+  getent passwd "$u" >/dev/null || continue
+  home=$(getent passwd "$u" | cut -d: -f6)
+  sudo rsync -avh --progress "$home"/ \
+    nas-ip:/mnt/dev/gameservers/_staging/"$u"/
+done
+```
+
+Optional: Steam game binaries are re-downloadable via `steamcmd`, so you may
+exclude `Steam/` and `steamcmd/` to save space and time
+(`--exclude 'Steam/' --exclude 'steamcmd/'`). Keep every game's `Saved/`,
+world, and config directories. When in doubt, copy it all -- storage is
+cheaper than a lost world.
+
+### 5.5.3 Stand up Pelican on gameservers-vm
+
+1. Deploy the Pelican **Panel** + **Wings** stack on `gameservers-vm` (see
+   `compose/docker-compose.gameservers.yml`).
+2. Confirm the Panel is reachable (`pelican.xransum.com` via CF Tunnel -> Nginx
+   PM) and that Wings registers as a node.
+3. Install/confirm the eggs for each engine you are migrating (Minecraft Java
+   PaperMC, Minecraft Bedrock, Valheim, Palworld, CS2, plus any existing
+   serverhub engine such as Rust, Satisfactory, Factorio, 7 Days to Die).
+
+### 5.5.4 Create servers and import worlds
+
+For each world surfaced in 5.5.1:
+
+1. Create a Pelican server from the matching egg, with its per-game RAM/CPU
+   limits (see `compose/docker-compose.gameservers.yml` for starting
+   estimates).
+2. Import the staged files into the new server's data directory using the
+   Pelican file manager or SFTP (host/port shown in the server's Settings),
+   pulling from `/mnt/gameservers/_staging/<user>/<game>/`. Map each engine's
+   world/save/config paths to the egg's expected layout.
+3. Configure a Pelican **backup schedule** for the server targeting
+   `/mnt/gameservers` so ongoing worlds are backed up to the NAS.
+
+### 5.5.5 Verify nothing was missed
+
+- Cross-check every user dir and every world/save dir from the 5.5.1 snapshot
+  against the servers created in Pelican -- confirm each one has a server and
+  its files imported with matching sizes.
+- Start one world per engine via the Panel, confirm it loads with existing
+  progress, then stop it. Do not leave them running -- they are on-demand.
+
+---
+
 ## Phase 6 — External access cutover
 
 ### 6.1 Cloudflare Tunnel (public subdomains)
@@ -604,6 +706,13 @@ sudo rm -rf /opt/Radarr /opt/Sonarr /opt/Prowlarr /opt/byparr \
 
 Keep `serverhub` powered on for a few weeks as a cold fallback before
 physically repurposing or decommissioning it.
+
+> **Do not delete any game-server home directory** (`/home/minecraft`,
+> `/home/steam`, and any other game users surfaced in Phase 5.5.1) until Phase
+> 5.5.5 is verified on `gameservers-vm` -- every world loads with existing
+> progress under Pelican. The commands above only touch the media stack under
+> `/opt`; game-server saves live under `/home` and must be confirmed migrated
+> first.
 
 ---
 

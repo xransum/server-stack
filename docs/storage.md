@@ -129,7 +129,7 @@ s3/
 dev/
   backups/            ← long-term VM snapshots exported from Proxmox
   vmdisks/            ← active devbox VM disk images (iSCSI or NFS)
-  gameservers/        ← game world saves, per-game subdirs
+  gameservers/        ← Pelican game-server backup target (not live worlds)
 ```
 
 ### The hardlink requirement — critical for *arr
@@ -193,6 +193,11 @@ Recommended schedule:
 | `s3/store` | No | Yes | Yes | No | 7d / 4w |
 | `dev/gameservers` | No | Yes | Yes | No | 7d / 4w |
 | `dev/vmdisks` | No | Yes | No | No | 7d |
+
+> **`dev/gameservers` is a backup target, not a live world mount.** Live game
+> worlds run on the `gameservers-vm` local disk (Pelican Wings data dir).
+> Pelican pushes scheduled backups into this dataset, and the ZFS snapshots
+> above give a second, independent restore path on top of the Pelican backups.
 
 Snapshots are local to the NAS. For off-site backup, TrueNAS supports
 ZFS replication to a remote TrueNAS instance or cloud (e.g. Backblaze B2

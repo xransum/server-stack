@@ -9,8 +9,10 @@ Cursor, Aider, etc.) working in this repo. Read it before making any changes.
 
 Native systemd service stack for a self-hosted Debian 12 media server
 (`serverhub`, 192.168.1.166). The long-term migration target is a Proxmox
-homelab with two VMs running Docker Compose, backed by a TrueNAS NAS over
-NFS. See `docs/proxmox-compute.md` and `docs/migration.md` for that plan.
+homelab with two VMs backed by a TrueNAS NAS over NFS: `media-vm` runs the
+media stack via Docker Compose, and `gameservers-vm` runs game servers under
+Pelican (Panel + Wings). See `docs/proxmox-compute.md` and `docs/migration.md`
+for that plan.
 
 Both deployment targets must be kept in sync at all times.
 
@@ -178,4 +180,4 @@ echo 'PASSWORD' | sudo -S -p '' cp /tmp/file /dest/file
 
 | Decision | Options | Notes |
 |---|---|---|
-| Per-game RAM/CPU limits | Per-game | TODOs in `compose/docker-compose.gameservers.yml`. Fill in when standing up each game. |
+| Per-game RAM/CPU limits | Per-game | Set on each Pelican server when it is stood up. Starting estimates in `compose/docker-compose.gameservers.yml`. |
