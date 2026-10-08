@@ -53,7 +53,7 @@ in a cloud VM.
 | VM | vCPU | RAM | Local disk | GPU | Purpose |
 |---|---|---|---|---|---|
 | `media-vm` | 10 cores | 24 GB | 64 GB | RTX 2070 (PCIe PT) | Full media stack |
-| `gameservers-vm` | 8 cores | 32 GB | 32 GB | None | Pterodactyl + game containers |
+| `gameservers-vm` | 8 cores | 32 GB | 32 GB | None | Pelican Panel + Wings + game containers |
 | `devbox-template` | 4 cores | 8 GB | 32 GB (thin) | None | Template only, never run directly |
 | `devbox-N` | 4 cores | 8 GB | Thin clone | None | On-demand dev work |
 
@@ -67,6 +67,80 @@ in a cloud VM.
 > 32 GB RAM for this VM may be needed. See per-game resource notes in
 > `compose/docker-compose.gameservers.yml`.
 
+> **Why gameservers-vm must be a full KVM VM (not LXC):** game servers are
+> managed by Pelican, whose Wings daemon runs each game in its own Docker
+> container. Wings requires a real kernel with full Docker support and does
+> **not** run inside an unprivileged LXC/OpenVZ container. `gameservers-vm` is
+> a KVM VM, which satisfies this. Do not "optimize" it into an LXC later.
+
+---
+
+## Service inventory
+
+Authoritative roster of what runs on the stack, used as the source of truth
+for the migration. Re-confirm against the live `serverhub` box at cutover --
+new services may be added before the final build.
+
+Status legend: **active** = migrate it; **deprecated** = do not migrate, retire;
+**target** = intended for the new build, may not exist on serverhub yet.
+
+**Media** (media-vm)
+
+| Service | Status | Notes |
+|---|---|---|
+| Plex | active | media server; GPU/NVENC consumer |
+| Tautulli | active | Plex analytics + watch history |
+| Overseerr | active | request UI (friends/family facing) |
+
+**Indexers / Download** (media-vm)
+
+| Service | Status | Notes |
+|---|---|---|
+| Sonarr | active | TV automation |
+| Radarr | active | movie automation |
+| Prowlarr | active | indexer manager |
+| rdt-client | active | Real-Debrid torrent client |
+| queue-cleaner | active | custom script, stalled/failed queue cleanup |
+| rdt-blocklist | active | custom sidecar, auto-blocklists infringing releases |
+
+**Cloudflare bypass** (media-vm)
+
+| Service | Status | Notes |
+|---|---|---|
+| Byparr | active | Cloudflare challenge solver (Firefox-based) |
+| byparr-unwrap | active | strips Firefox plaintext-viewer wrapper for JSON |
+| byparr-proxy-apibay | active | proxy fronting ThePirateBay/apibay via Byparr + unwrap |
+| byparr-proxy-1337x | deprecated | 1337x solve fails upstream; retire |
+| FlareSolverr | deprecated | replaced by Byparr |
+
+**Proxy / Access** (media-vm)
+
+| Service | Status | Notes |
+|---|---|---|
+| Nginx Proxy Manager | active | reverse proxy + SSL |
+| cloudflared | active | Cloudflare Tunnel for public subdomains |
+| dns-updater | deprecated | superseded once CF Tunnel is live; retire |
+
+**Game servers** (gameservers-vm, Pelican-managed, on-demand). Target roster
+for the new build below; see Phase 5.5 in `docs/migration.md` for migrating
+any existing serverhub worlds, which happens regardless of this list.
+
+| Service | Status | Notes |
+|---|---|---|
+| Pelican Panel | target | game-server management UI (Pterodactyl Beta successor) |
+| Pelican Wings | target | node daemon; runs each game as its own container |
+| Minecraft Java (PaperMC) | target | |
+| Minecraft Bedrock | target | |
+| Valheim | target | |
+| Palworld | target | |
+| Counter-Strike 2 | target | |
+
+**Native (not containerized)**
+
+| Service | Status | Notes |
+|---|---|---|
+| ClamAV | active | antivirus daemon; runs native, not in Docker |
+
 ---
 
 ## NFS mounts inside VMs
@@ -79,6 +153,8 @@ nas-ip:/mnt/media    /mnt/media    nfs    rw,sync,hard,intr,rsize=131072,wsize=1
 nas-ip:/mnt/s3       /mnt/s3       nfs    rw,sync,hard,intr    0 0
 
 # gameservers-vm
+# Backup target only -- live game worlds live on this VM's local disk; Pelican
+# pushes scheduled backups here. Not a live world mount.
 nas-ip:/mnt/dev/gameservers    /mnt/gameservers    nfs    rw,sync,hard,intr    0 0
 ```
 
@@ -202,30 +278,46 @@ qm start <new-id>
 
 ## Game server workflow (gameservers-vm)
 
-Game servers run as Docker containers managed by Pterodactyl Panel.
-World saves and persistent data mount from the NAS (`/mnt/gameservers/<game>/`)
-so they survive container rebuilds.
+Game servers are managed by **Pelican** (the actively maintained Beta successor
+to Pterodactyl). Pelican has two parts:
 
-Archive workflow:
-1. Stop the game server container via Pterodactyl
-2. On the NAS: take a ZFS snapshot of `dev/gameservers/<game>` dataset
-3. Container can be deleted — world is safe on NAS
-4. To restore: create new container, same NFS mount path, start
+- **Panel** -- the web UI and API, always-on, reverse-proxied like other HTTP
+  services.
+- **Wings** -- the node daemon that runs each game server in its own Docker
+  container from a Pelican "egg" (per-game template). Wings requires a full
+  KVM VM (see VM layout note) and runs on `gameservers-vm`.
 
-Per-game resource limits are defined in `compose/docker-compose.gameservers.yml`.
-These are left as TODOs until each game is actually stood up — resource
-requirements vary significantly per game and per modpack.
+Each game = its own Pelican server (egg/container), started on demand. The
+stack is never run all at once -- there is not enough RAM to run every game
+concurrently.
+
+**Storage model:** live game worlds and configs live on the **local VM disk**
+(Wings data directory). This avoids SQLite/world-file corruption and latency
+from running live game state over NFS. Durability comes from **Pelican
+scheduled backups** pushed to the NAS `dev/gameservers` dataset (mounted at
+`/mnt/gameservers`, backup target only), which keeps ZFS snapshot retention.
+
+Backup/restore workflow:
+1. Configure a Pelican backup schedule per server targeting `/mnt/gameservers`.
+2. The NAS retains ZFS snapshots of `dev/gameservers` (7d / 4w) on top of the
+   Pelican backups, giving two independent restore paths.
+3. To restore a world: create the server from its egg, then restore the latest
+   Pelican backup (or pull from a NAS snapshot) into the Wings data directory.
+
+Per-game resource limits are set on each Pelican server when it is stood up.
+These are left as TODOs until each game is actually created -- requirements
+vary significantly per game and per modpack.
 
 ### Game server DNS and subdomain routing
 
 Game server traffic splits into two categories with different routing:
 
-**HTTP admin panels** (Pterodactyl Panel web UI) route through Cloudflare
+**HTTP admin panel** (Pelican Panel web UI) routes through Cloudflare
 Tunnel -> Nginx PM like all other HTTP services:
 
 | Subdomain | Target | Access |
 |---|---|---|
-| `pterodactyl.xransum.com` | `gameservers-vm:80` | CF Tunnel |
+| `pelican.xransum.com` | `gameservers-vm:80` | CF Tunnel |
 
 **Raw TCP/UDP game ports** (actual game client connections) cannot go
 through Cloudflare Tunnel (HTTP only). These use direct port forwards on
@@ -251,9 +343,11 @@ FIOS gateway port forward rules (add when a game server is active):
 | 28016 | gameservers-vm-ip | 28016 | TCP (RCON) |
 
 Grey cloud records contain your real home IP and must be kept updated when
-the IP rotates. The `dns-updater` service handles this automatically via the
-Cloudflare API. See `docs/dns-updater.md`. Only grey cloud records need
-updating — orange cloud (proxied) subdomains are unaffected by IP changes.
+the IP rotates. On `serverhub` this was handled by the `dns-updater` service
+via the Cloudflare API, but that service is **deprecated** and will not be
+migrated (see Service inventory) -- handle IP updates via the router's built-in
+dynamic DNS or Cloudflare's own tooling instead. Only grey cloud records need
+updating -- orange cloud (proxied) subdomains are unaffected by IP changes.
 
 Minecraft players connect using the subdomain directly. The standard
 Minecraft SRV record approach works but is not required since the default
@@ -347,4 +441,4 @@ for Tailscale-accessible subdomains.
 
 | Decision | Options | Notes |
 |---|---|---|
-| Per-game RAM/CPU limits | Per-game | TODOs in `compose/docker-compose.gameservers.yml`. Fill in when standing up each game. |
+| Per-game RAM/CPU limits | Per-game | Set on each Pelican server when it is stood up. Starting estimates in `compose/docker-compose.gameservers.yml`. |

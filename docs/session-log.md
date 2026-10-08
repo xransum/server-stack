@@ -9,6 +9,52 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-08 -- Game servers move to Pelican; service inventory + deprecations
+
+**Context:** Finalized the game-server subsystem for the Proxmox migration and
+captured the authoritative service inventory. The two-VM model is unchanged:
+`media-vm` (media stack) + `gameservers-vm` (game servers), plus on-demand dev
+boxes. No change to that architecture -- the two fixed VMs have a resource
+floor with plenty of headroom.
+
+**Decision 1 -- Pelican for game servers (supersedes Pterodactyl placeholder):**
+Game servers are managed by **Pelican** (the actively maintained Beta successor
+to Pterodactyl): a **Panel** (web UI + API) plus a **Wings** node daemon that
+runs each game as its own Docker container from an "egg". Each game = its own
+Pelican server, started on demand. Hard constraint: **Wings requires a full KVM
+VM, not an LXC** -- `gameservers-vm` already is a KVM VM, so this holds; noted
+in `docs/proxmox-compute.md` so it is not "optimized" into an LXC later.
+Replaced the per-game compose services in
+`compose/docker-compose.gameservers.yml` with a Panel + MariaDB + Redis + Wings
+stack; dropped the now-obsolete per-game env vars from `compose/.env.example`
+and rewrote the `compose/README.md` game section. DNS admin host renamed
+`pterodactyl.xransum.com` -> `pelican.xransum.com`.
+
+**Decision 2 -- game storage = local disk + Pelican backups (supersedes live
+NFS worlds):** Live worlds run on the `gameservers-vm` local disk (Wings data
+dir) to avoid SQLite/world corruption and latency over NFS. Durability comes
+from **Pelican scheduled backups** pushed to the NAS `dev/gameservers` dataset,
+now reframed in `docs/storage.md` as a **backup target** (not a live mount),
+with ZFS snapshots (7d / 4w) giving a second restore path.
+
+**Decision 3 -- service inventory + deprecations:** Captured the authoritative
+roster in `docs/proxmox-compute.md` (new Service inventory section) with status
+flags. Deprecated (do not migrate, retire): `dns-updater` (superseded by CF
+Tunnel), `FlareSolverr` (replaced by Byparr), `byparr-proxy-1337x` (upstream
+solve fails). Target game roster: Pelican Panel/Wings, Minecraft Java (PaperMC),
+Minecraft Bedrock, Valheim, Palworld, Counter-Strike 2.
+
+**Migration (inventory-agnostic):** `docs/migration.md` gained Phase 5.5
+(game-server migration) written to **enumerate live at cutover and copy whole
+home trees wholesale**, so servers added before the final build are captured
+automatically -- no hardcoded inventory as source of truth. Flow: stage homes
+to the NAS, stand up Pelican, create servers from eggs, import worlds via
+SFTP/file manager, verify each loads with existing progress. Phase 8 guarded so
+game-server home dirs (`/home/minecraft`, `/home/steam`, etc.) are not deleted
+until Phase 5.5.5 is verified.
+
+---
+
 ## 2026-08-08 — rdt-blocklist service added; path typos fixed
 
 **Context:** Observed live on serverhub that when Real-Debrid rejects a
