@@ -70,32 +70,39 @@ cp definitions/*.yml compose/custom-definitions/
 Run on `gameservers-vm` — a separate Proxmox VM with independent resource
 allocation. Game servers should not be able to starve the media stack.
 
-### Profiles
+Game servers are managed by **Pelican** (Panel + Wings), not by per-game
+compose services. This compose stack only stands up the Panel (web UI + API),
+its database/cache, and the Wings node daemon. Individual games are created in
+the Panel UI from "eggs" and run as Wings-managed containers. See
+`docs/proxmox-compute.md` "Game server workflow" and `docs/migration.md`
+Phase 5.5.
 
-| Profile | Game |
+### Services
+
+| Service | Role |
 |---|---|
-| `minecraft` | Minecraft Java (PaperMC) |
-| `minecraft-bedrock` | Minecraft Bedrock |
-| `valheim` | Valheim |
-| `palworld` | Palworld |
-| `cs2` | Counter-Strike 2 |
+| `panel` | Pelican Panel web UI + API (always-on, reverse-proxied) |
+| `panel-db` | MariaDB backing the Panel |
+| `panel-cache` | Redis cache/queue/session store for the Panel |
+| `wings` | Node daemon; runs each game server container from its egg |
 
-Pterodactyl Panel runs without a profile (always-on management UI).
+Live worlds run on the `gameservers-vm` local disk (Wings data dir). Pelican
+pushes scheduled backups to the NAS `dev/gameservers` dataset (mounted at
+`/mnt/gameservers`, backup target only), which also keeps ZFS snapshots.
 
-### Quick start (spin up a game server)
+### Quick start
 
 ```bash
 cd compose/
 cp .env.example .env
-# edit .env — fill in game server passwords, CS2 token, etc.
+# edit .env — set PELICAN_APP_URL and PELICAN_DB_PASSWORD
 
-# Start just Minecraft
-docker compose -f docker-compose.gameservers.yml --profile minecraft up -d
+# Bring up Panel + DB + cache + Wings
+docker compose -f docker-compose.gameservers.yml up -d
 
-# Archive a world (stop container, snapshot on NAS, optionally remove container)
-docker compose -f docker-compose.gameservers.yml stop minecraft-java
-# Then on NAS: zfs snapshot pool/dev/gameservers/minecraft-java@world-name-$(date +%Y%m%d)
-docker compose -f docker-compose.gameservers.yml rm minecraft-java
+# Then: create an admin user in the Panel, register the Wings node
+# (Panel -> Nodes), and create each game server from its egg. Per-game
+# passwords/tokens/world names are set per-server in the Panel, not in .env.
 ```
 
 ---
