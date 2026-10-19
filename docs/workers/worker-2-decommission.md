@@ -1,7 +1,12 @@
 # Worker 2 — Decommission Serverhub
 
 ## Status
-✅  completed
+⚠️ scope updated — Step 0 (service verification) added, Overseerr issue pending
+
+> **NOTE FOR ACTIVE WORKER SESSION**: The scope of this job has been updated by the parent.
+> Before considering decommission complete, you must complete Step 0 (verify all media-vm
+> services are healthy including Overseerr). The user reported Overseerr is having issues.
+> Investigate and fix Overseerr before marking this job complete.
 
 ## Trigger
 Independent — can be started anytime. Does not depend on Worker 1.
@@ -47,6 +52,37 @@ Skip those directories entirely during cleanup.
 ---
 
 ## Job Steps
+
+### Step 0 — Verify ALL media-vm services are healthy (REQUIRED before proceeding)
+
+**This step was added after the initial worker run. Must be completed before marking job done.**
+
+Check every service is functioning correctly. If any fail, fix them before proceeding with decommission.
+
+```bash
+ssh media-vm "docker ps --format 'table {{.Names}}\t{{.Status}}'"
+```
+
+Verify each service end-to-end:
+
+| Service | How to verify |
+|---|---|
+| **Plex** | `https://plex.xransum.com` loads, libraries show Movies/TV/Audio Books with content |
+| **Sonarr** | `https://sonarr.xransum.com` loads, root folder `/mnt/media/tv` accessible |
+| **Radarr** | `https://radarr.xransum.com` loads, root folder `/mnt/media/movies` accessible |
+| **Prowlarr** | `https://prowlarr.xransum.com` loads, indexers enabled, no disabled indexers |
+| **rdt-client** | `https://rdt.xransum.com` loads, settings show correct RD API key and download paths |
+| **Overseerr** | `https://overseerr.xransum.com` loads, can browse and submit a request, Plex connection works |
+| **Tautulli** | `https://tautulli.xransum.com` loads |
+| **Calibre-Web** | `https://calibre.xransum.com` loads, books visible |
+
+**Known issues that are NOT blockers (cosmetic only):**
+- Sonarr/Radarr indexer backoff warnings — auto-recover within an hour
+- Sonarr/Radarr Docker path warning for rdt-client — cosmetic, functionality unaffected
+
+**If Overseerr is broken:** Investigate the connection to Plex. Overseerr settings → Plex → verify the server IP is `192.168.1.169` and token is valid. If needed, re-run the Plex sync in Overseerr settings.
+
+Do NOT proceed to Step 1 until all services above are verified working.
 
 ### Step 1 — Verify media-vm is fully operational
 
