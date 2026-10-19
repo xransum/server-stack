@@ -105,6 +105,8 @@ services:
     volumes:
       - calibre-web-config:/config
       - /mnt/media/books:/books
+      # Auto-import watcher — runs inotifywait inside the container on /books
+      - ./calibre-watch-init.sh:/custom-cont-init.d/99-calibre-watch:ro
     ports:
       - "8083:8083"
 
