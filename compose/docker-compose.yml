@@ -313,10 +313,11 @@ services:
     # Keeps grey-cloud DNS records updated when home IP changes.
     # Add new game server subdomains to DOMAINS as they are created.
     environment:
-      CF_API_TOKEN: ${CF_DDNS_TOKEN}
+      CLOUDFLARE_API_TOKEN: ${CF_DDNS_TOKEN}
       DOMAINS: "plex.xransum.com,mc1.xransum.com,mc2.xransum.com,valheim.xransum.com,satisfactory.xransum.com,factorio.xransum.com"
       PROXIED: "false"
       UPDATE_CRON: "@every 5m"
+      IP6_PROVIDER: "none"
 
   # ---------------------------------------------------------------------------
   # S3 profile
