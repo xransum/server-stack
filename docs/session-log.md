@@ -9,6 +9,25 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — Worker 2 cleanup complete: rdt-client FinishedAction + download dir purge
+
+**Context:** Second session picking up Worker 2 remaining work. Main decommission was already complete; this session closed out the post-decommission cleanup items.
+
+**Done:**
+
+- **rdt-client FinishedAction set to 2** — was `1` (delete RD torrent, keep local files); changed to `2` (delete torrent + local files after import). Radarr/Sonarr import copies the file, then rdt-client deletes the download dir — no more leftover dirs accumulating. NFS root squash required a workaround: copy DB to `/tmp`, edit as ransum, copy back via `docker run --user 950:950 busybox`.
+
+- **Download dirs cleaned** — deleted all three leftover dirs: `Despicable.Me.2010...`, `Supergirl (2026)...`, `The.Night.Of.S01E01...`. All had already been imported cleanly (confirmed via scan-media logs).
+
+- **Pipeline end-to-end verified** — The Night Of S01E01 and Supergirl (2026) both confirmed imported + ClamAV-scanned clean.
+
+**Decision — NFS hardlink fix dropped:**
+TrueNAS only exports per-subdirectory NFS shares. Adding a `/mnt/media` parent export requires sharing a root ZFS dataset (TrueNAS warns against this) and NFS `crossmnt` is not configurable via TrueNAS UI. Even with a parent mount, hardlinks crossing ZFS child dataset boundaries are unreliable. Accepted Option C (copy + delete via FinishedAction=2) as the permanent approach. Temporary 2x disk usage during import is the only downside; acceptable until disk pressure becomes a real concern.
+
+**Worker 2 status: ✅ completed.**
+
+---
+
 ## 2026-10-19 — post-decommission service fixes (byparr stack + Overseerr)
 
 **Context:** After serverhub was powered off, several services broke because their configs still pointed at serverhub-era addresses (`localhost`, RAID paths, old hostnames). Fixed everything needed for the pipeline to function end-to-end.

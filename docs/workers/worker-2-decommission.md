@@ -1,7 +1,7 @@
 # Worker 2 — Decommission Serverhub
 
 ## Status
-⚠️  post-decommission cleanup in progress — see Remaining Work below
+✅ completed
 
 ## Trigger
 Independent — can be started anytime. Does not depend on Worker 1.
@@ -198,53 +198,18 @@ All fixes below were required because services had serverhub-era config (localho
 - **scan-media (ClamAV)** — new Docker service deployed: `clamd` + `freshclam` (2h auto-update) + Python HTTP server on port 8080. `scan-media.sh` mounted into Radarr + Sonarr containers, Custom Script connection added (On Import trigger). Scans parent directory recursively, deletes infected files, blocklists release in Radarr/Sonarr, sends Discord embed notification.
 - **compose/.env** — added `RADARR_API_KEY`, `SONARR_API_KEY`, `DISCORD_WEBHOOK_URL` as shared vars on media-vm.
 
+**Post-decommission cleanup completed 2026-10-19 (second session):**
+
+- **rdt-client FinishedAction** — changed `Integrations:Default:FinishedAction` from `1` (delete RD torrent only, keep local files) to `2` (delete torrent + local files). NFS root squash prevented direct sqlite write as root; fixed by copying DB to `/tmp`, editing as ransum user, copying back via `docker run --user 950:950 busybox cp` to preserve NFS ownership.
+- **Leftover download dirs deleted** — `Despicable.Me.2010...`, `Supergirl (2026)...`, and `The.Night.Of.S01E01...` all removed from `/mnt/media/downloads/radarr/` and `/mnt/media/downloads/sonarr/`.
+- **Pipeline verified** — scan-media logs confirmed The Night Of S01E01 and Supergirl (2026) both imported cleanly and ClamAV scanned clean before the second session started.
+- **NFS hardlink fix dropped** — TrueNAS only has per-subdirectory NFS exports; adding a parent `/mnt/media` export would require exporting a root ZFS dataset (TrueNAS warns against this) and NFS crossmnt is not exposed in TrueNAS UI. Radarr/Sonarr copy-then-delete (Option C) is sufficient: rdt-client now deletes local files after import, so no leftover dirs accumulate. The brief 2x disk usage during import is an acceptable tradeoff.
+
 ---
 
-## Remaining Work (pick up here in next session)
+## Remaining Work
 
-### 1. rdt-client FinishedAction (QUICK — 5 min)
-
-After Radarr/Sonarr import a file, rdt-client leaves the download directory on disk because `Integrations:Default:FinishedAction` is set to `1` (delete torrent from RD only, keep local files). Change to `2` (delete torrent AND local files).
-
-Fix via the rdt-client web UI at `https://rdt.xransum.com` → Settings → Integrations → After download action → set to "Delete torrent and files".
-
-OR via sqlite on the NAS DB:
-```bash
-# Stop rdt-client first
-docker stop rdt-client
-# Edit on media-vm (DB is on NFS at /mnt/media/downloads/rdtclient.db)
-sqlite3 /mnt/media/downloads/rdtclient.db "UPDATE Settings SET Value='2' WHERE SettingId='Integrations:Default:FinishedAction'"
-docker start rdt-client
-```
-
-### 2. Delete leftover Despicable Me download dir (QUICK — 1 min)
-
-```bash
-ssh media-vm "rm -rf '/mnt/media/downloads/radarr/Despicable.Me.2010.1080p.3D.BluRay.H-SBS.x264-CULTHD [PublicHD]'"
-```
-
-### 3. NFS hardlink fix (BIGGER — requires TrueNAS + fstab change)
-
-**Root cause:** `/mnt/media/downloads` and `/mnt/media/movies` are separate NFS mounts. The OS treats them as different filesystems so hardlinks fail. Radarr/Sonarr fall back to copy, leaving the original in the download dir even after import.
-
-**Fix:** Export `/mnt/media` as a single parent NFS share on TrueNAS. Update `/etc/fstab` on media-vm:
-
-```
-# Replace all per-subdir mounts with one parent mount:
-192.168.1.164:/mnt/media /mnt/media nfs rw,hard,intr,_netdev,noatime 0 0
-```
-
-Then remove the individual subdirectory mount entries from fstab and remount. All subdirs (`movies`, `tv`, `downloads`, `audiobooks`, `books`, `music`) stay at their existing paths under `/mnt/media` — no compose changes needed. Hardlinks will work across downloads and media dirs since they'll be the same filesystem.
-
-**Before doing this:** Verify TrueNAS has a single `/mnt/media` NFS export covering all subdirs (check TrueNAS → Sharing → NFS). If only per-subdir exports exist, add the parent export first.
-
-### 4. Verify Sonarr pipeline
-
-Active downloads at time of session end:
-- `The Night Of S01E01` — was downloading in Sonarr
-- `Supergirl (2026) 2160p UHD` — was downloading in Radarr
-
-Verify both imported cleanly, ClamAV scan triggered (check `docker logs scan-media`), and files appear in Plex.
+All remaining work completed 2026-10-19. See Completion Notes below.
 
 ---
 
