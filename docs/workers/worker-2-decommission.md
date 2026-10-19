@@ -1,7 +1,7 @@
 # Worker 2 — Decommission Serverhub
 
 ## Status
-✅  completed
+⚠️  post-decommission cleanup in progress — see Remaining Work below
 
 ## Trigger
 Independent — can be started anytime. Does not depend on Worker 1.
@@ -180,3 +180,82 @@ Step 6 (delete media from serverhub RAID) was explicitly skipped at user request
 
 **Root cause of Overseerr "Loading..." bug:**
 `settings.json` retained serverhub-era config (`hostname: localhost`, RAID paths). Once serverhub was powered off, Overseerr's Radarr/Sonarr API calls failed and the request dialog dropdowns hung at "Loading...". Fixed by pointing at Docker service names on the internal network.
+
+---
+
+## Post-Decommission Fixes Applied (same session)
+
+All fixes below were required because services had serverhub-era config (localhost, RAID paths, wrong env vars).
+
+- **Overseerr** — `settings.json` updated: Radarr/Sonarr hostnames `localhost` → Docker service names, root folders `/mnt/raid0/...` → `/mnt/media/...`, Tautulli hostname `mediaserver.kevin-haas.com` → `tautulli`.
+- **byparr-unwrap** — `docker-compose.yml` had `BYPARR:` env var but script reads `UNWRAP_UPSTREAM_URL`. Fixed + removed `/v1` suffix (script appends request path, double `/v1/v1` caused 404).
+- **apibay/TPB Cardigann definition** — hardcoded `127.0.0.1:8882` → `byparr-proxy-apibay:8882`. TPB now returns 100 results.
+- **1337x disabled** — Cardigann text extraction returns empty when base URL is HTTP (not HTTPS). Prowlarr bug. Disabled; 4 other indexers provide sufficient coverage.
+- **Radarr/Sonarr indexer URLs** — all synced indexers had `localhost:9696` → updated to `prowlarr:9696` via API.
+- **Radarr collections** — 122 collections had stale root folder `/mnt/raid0/media/Videos/Movies` → bulk-updated to `/mnt/media/movies` via API.
+- **Sonarr indexer backoff** — `EscalationLevel: 8` baked into DB; cleared via direct sqlite DELETE on `IndexerStatus` table.
+- **Download dirs created** — `/mnt/media/downloads/radarr` and `/mnt/media/downloads/sonarr` created on TrueNAS with `chmod 777` (rdt-client runs as root, needs world-writable).
+- **scan-media (ClamAV)** — new Docker service deployed: `clamd` + `freshclam` (2h auto-update) + Python HTTP server on port 8080. `scan-media.sh` mounted into Radarr + Sonarr containers, Custom Script connection added (On Import trigger). Scans parent directory recursively, deletes infected files, blocklists release in Radarr/Sonarr, sends Discord embed notification.
+- **compose/.env** — added `RADARR_API_KEY`, `SONARR_API_KEY`, `DISCORD_WEBHOOK_URL` as shared vars on media-vm.
+
+---
+
+## Remaining Work (pick up here in next session)
+
+### 1. rdt-client FinishedAction (QUICK — 5 min)
+
+After Radarr/Sonarr import a file, rdt-client leaves the download directory on disk because `Integrations:Default:FinishedAction` is set to `1` (delete torrent from RD only, keep local files). Change to `2` (delete torrent AND local files).
+
+Fix via the rdt-client web UI at `https://rdt.xransum.com` → Settings → Integrations → After download action → set to "Delete torrent and files".
+
+OR via sqlite on the NAS DB:
+```bash
+# Stop rdt-client first
+docker stop rdt-client
+# Edit on media-vm (DB is on NFS at /mnt/media/downloads/rdtclient.db)
+sqlite3 /mnt/media/downloads/rdtclient.db "UPDATE Settings SET Value='2' WHERE SettingId='Integrations:Default:FinishedAction'"
+docker start rdt-client
+```
+
+### 2. Delete leftover Despicable Me download dir (QUICK — 1 min)
+
+```bash
+ssh media-vm "rm -rf '/mnt/media/downloads/radarr/Despicable.Me.2010.1080p.3D.BluRay.H-SBS.x264-CULTHD [PublicHD]'"
+```
+
+### 3. NFS hardlink fix (BIGGER — requires TrueNAS + fstab change)
+
+**Root cause:** `/mnt/media/downloads` and `/mnt/media/movies` are separate NFS mounts. The OS treats them as different filesystems so hardlinks fail. Radarr/Sonarr fall back to copy, leaving the original in the download dir even after import.
+
+**Fix:** Export `/mnt/media` as a single parent NFS share on TrueNAS. Update `/etc/fstab` on media-vm:
+
+```
+# Replace all per-subdir mounts with one parent mount:
+192.168.1.164:/mnt/media /mnt/media nfs rw,hard,intr,_netdev,noatime 0 0
+```
+
+Then remove the individual subdirectory mount entries from fstab and remount. All subdirs (`movies`, `tv`, `downloads`, `audiobooks`, `books`, `music`) stay at their existing paths under `/mnt/media` — no compose changes needed. Hardlinks will work across downloads and media dirs since they'll be the same filesystem.
+
+**Before doing this:** Verify TrueNAS has a single `/mnt/media` NFS export covering all subdirs (check TrueNAS → Sharing → NFS). If only per-subdir exports exist, add the parent export first.
+
+### 4. Verify Sonarr pipeline
+
+Active downloads at time of session end:
+- `The Night Of S01E01` — was downloading in Sonarr
+- `Supergirl (2026) 2160p UHD` — was downloading in Radarr
+
+Verify both imported cleanly, ClamAV scan triggered (check `docker logs scan-media`), and files appear in Plex.
+
+---
+
+## Key Infrastructure Reference
+
+| Service | URL | API Key |
+|---|---|---|
+| Radarr | http://localhost:7878 | `REDACTED_RADARR_KEY` |
+| Sonarr | http://localhost:8989 | `REDACTED_SONARR_KEY` |
+| Prowlarr | http://localhost:9696 | `REDACTED_PROWLARR_KEY` |
+| scan-media | http://scan-media:8080 | — |
+| Discord webhook | — | in compose/.env on media-vm |
+
+All commands run from media-vm via `ssh media-vm`.
