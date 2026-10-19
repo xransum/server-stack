@@ -9,6 +9,49 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — media-vm fully operational; migration complete; worker system established
+
+**Context:** Completed full migration from serverhub to media-vm. All services
+running in Docker Compose. Established a worker-based job system for remaining tasks.
+
+**Completed:**
+- Full Plex migration: DB, metadata, watch history, user profiles all transferred.
+  Libraries updated to new NAS paths (/mnt/media/movies, /mnt/media/tv, /mnt/media/audiobooks).
+- Sonarr/Radarr/Prowlarr migrated with all quality profiles, custom formats, indexers.
+- rdt-client migrated with all settings from serverhub DB (NAS DB at /mnt/media/downloads/rdtclient.db).
+  appsettings.json written to named volume to point rdt-client at NAS DB.
+- All Plex home users (11 managed accounts) re-granted library access.
+- CF tunnel configured: all services routed through cloudflared → NPM → containers.
+- cloudflare-ddns container deployed (favonia/cloudflare-ddns) keeping grey-cloud
+  records updated: plex, mc1, mc2, valheim, satisfactory, factorio.
+- plex.xransum.com: grey cloud direct A record, router port forwards 443+32400 → media-vm,
+  NPM SSL with Let's Encrypt cert (expires 2027-01-17). Green padlock.
+- Tailscale deployed on media-vm, proxmox, truenas. SSH aliases: *-ts.
+- DNS: proxmox.xransum.com → Tailscale, nas.xransum.com → Tailscale.
+- All services behind CF tunnel (no direct exposure except plex.xransum.com).
+- Worker job system created in docs/workers/ for remaining tasks.
+- AGENTS.md updated: deployment status corrected, cloudflare-ddns decision resolved.
+- rdt-blocklist and queue-cleaner both running with DRY_RUN=false.
+- Byparr cloudflare-bypass stack running (all profiles active).
+- Calibre-Web: books imported, inotify watcher auto-imports new files.
+- ClamAV + rkhunter run on serverhub after miner incident (no persistence found).
+- Plex updated to v1.43.4 on serverhub after XMRig miner found (exploited via port 32400).
+
+**Remaining (see docs/workers/):**
+- Worker 1: PCIe GPU passthrough (RTX 2070 still in serverhub)
+- Worker 2: Serverhub decommission (independent)
+- Worker 3: gameservers-vm + Pelican Panel (independent)
+- Worker 4: devbox-template VM (independent)
+
+**Architecture decisions:**
+- Plex NOT behind CF tunnel (ToS prohibits video streaming at scale). Uses direct
+  port forward + NPM SSL instead.
+- All other services behind CF tunnel via NPM.
+- cloudflare-ddns replaces deprecated dns-updater for grey-cloud record management.
+- Single homelab SSH key (~/.ssh/homelab ed25519) for all homelab hosts.
+
+---
+
 ## 2026-10-18 — media-vm deployment started; SSH hardening; compose updates
 
 **Context:** Proxmox hardware arrived and media-vm (Ubuntu 24.04, 192.168.1.169)
