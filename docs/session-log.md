@@ -9,6 +9,28 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — post-decommission service fixes (byparr stack + Overseerr)
+
+**Context:** After serverhub was powered off, several services broke because their configs still pointed at serverhub-era addresses (`localhost`, RAID paths, old hostnames). Fixed everything needed for the pipeline to function end-to-end.
+
+**Fixed:**
+
+- **Overseerr request dialog stuck on "Loading..."** — `settings.json` had Radarr/Sonarr hostnames as `localhost` (serverhub), root folders as `/mnt/raid0/media/...` (serverhub RAID), and Tautulli hostname as `mediaserver.kevin-haas.com`. Updated all to Docker service names (`radarr`, `sonarr`, `tautulli`) and NAS paths (`/mnt/media/movies`, `/mnt/media/tv`). Restarted Overseerr. Requests now work.
+
+- **byparr-unwrap broken (TPB/apibay returning 502)** — `docker-compose.yml` had `BYPARR: http://byparr:8191/v1` for the byparr-unwrap service, but the script reads `UNWRAP_UPSTREAM_URL`, not `BYPARR`. Script was falling back to the default `http://127.0.0.1:8192` which doesn't exist inside Docker. Fixed: renamed env var to `UNWRAP_UPSTREAM_URL: http://byparr:8191` (no `/v1` suffix — script appends the request path, so including `/v1` caused double `/v1/v1` → 404).
+
+- **byparr indexer definitions using `127.0.0.1`** — both `1337x-byparr.yml` and `apibay-byparr.yml` had `127.0.0.1:8881/8882` hardcoded (valid for native systemd, broken in Docker). Updated to Docker service names (`byparr-proxy-1337x:8881`, `byparr-proxy-apibay:8882`). Also updated `compose/custom-definitions/` (the bind-mounted live path Prowlarr reads).
+
+- **ThePirateBay (via Byparr) — now working** — 100 results verified after all above fixes.
+
+**Known limitation — 1337x disabled:**
+`1337x (via Byparr)` indexer is disabled in Prowlarr. Prowlarr's Cardigann CSS engine cannot extract anchor text when the indexer base URL is HTTP (not HTTPS) — the `title` field selector returns empty for every release. Root cause is likely a Prowlarr/AngleSharp bug with HTTP base URL resolution. Not worth further debugging given 4 other indexers (TPB, Knaben, Torrent Downloads, YTS) provide sufficient coverage. Re-enable only if a specific release is found exclusively on 1337x.
+
+**Pipeline verified end-to-end:**
+Overseerr request → Radarr receives → Prowlarr searches → indexers return results. Actual download not fully tested (Supergirl only had CAM rips; Despicable Me request was submitted but pipeline verification was interrupted).
+
+---
+
 ## 2026-10-19 — serverhub decommissioned + Overseerr fixed (Worker 2)
 
 **Context:** Ran Worker 2 decommission job. media-vm confirmed as sole production server.

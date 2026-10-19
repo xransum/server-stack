@@ -171,25 +171,23 @@ search:
       args: ["\\bS(20\\d{2})\\b", "$1"]
 
   rows:
-    selector: "tr:has(a[href^=\"/torrent/\"]){{ if .Config.uploader }}:has(td[class^=\"coll-5\"]:contains({{ .Config.uploader }})){{ else }}{{ end }}"
+    # NOTE: uses href*= (contains) not href^= (starts-with) because Cardigann resolves
+    # hrefs to absolute URLs (http://byparr-proxy-1337x:8881/torrent/...) before
+    # running selectors, so starts-with "/" never matches.
+    selector: "tr:has(a[href*=\"/torrent/\"]){{ if .Config.uploader }}:has(td[class^=\"coll-5\"]:contains({{ .Config.uploader }})){{ else }}{{ end }}"
 
   fields:
-    title_default:
-      # the movies, tv and music pages abbreviate the title
-      selector: td[class^="coll-1"] a[href^="/torrent/"]
-    title_optional:
-      # the movies, tv and music pages abbreviate the title so we process the href instead. #8137
-      optional: true
-      selector: td[class^="coll-1"] a[href^="/torrent/"]:contains("...")
+    title:
+      # Extract title from the URL slug. Cardigann resolves hrefs to absolute URLs
+      # (http://byparr-proxy-1337x:8881/torrent/ID/Title/) before running selectors,
+      # so anchor text extraction fails (returns empty). The slug always contains the
+      # full title and is reliable for both relative and absolute hrefs.
+      selector: td[class^="coll-1"] a[href*="/torrent/"]
       attribute: href
       filters:
+        - name: re_replace
+          args: ["^.+/torrent/\\d+/([^/]+)", "$1"]
         - name: urldecode
-        - name: split
-          args: ["/", 3]
-    title:
-      # title_optional can be empty so use the title_default instead #8586
-      text: "{{ if .Result.title_optional }}{{ .Result.title_optional }}{{ else }}{{ .Result.title_default }}{{ end }}"
-      filters:
         - name: re_replace
           args: ["-([\\w]+(?:[\\[\\]\\(\\)\\w]+)?)$", "~$1"]
         - name: replace
@@ -217,7 +215,7 @@ search:
           args: ["(?i)HDTVRIP", "HDTV"]
     category_optional:
       optional: true
-      selector: td[class^="coll-1"] a[href^="/sub/"]
+      selector: td[class^="coll-1"] a[href*="/sub/"]
       attribute: href
       filters:
         # extract the third part
@@ -226,11 +224,11 @@ search:
     category:
       text: "{{ if .Result.category_optional }}{{ .Result.category_optional }}{{ else }}40{{ end }}"
     details:
-      selector: td[class^="coll-1"] a[href^="/torrent/"]
+      selector: td[class^="coll-1"] a[href*="/torrent/"]
       attribute: href
     download:
       # .torrent link is on the details page
-      selector: td[class^="coll-1"] a[href^="/torrent/"]
+      selector: td[class^="coll-1"] a[href*="/torrent/"]
       attribute: href
     # dates come in three flavours:
     date_year:
