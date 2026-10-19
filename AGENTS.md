@@ -5,6 +5,17 @@ Cursor, Aider, etc.) working in this repo. Read it before making any changes.
 
 ---
 
+## Security Rules — ENFORCED, NO EXCEPTIONS
+
+- **NEVER** commit API keys, tokens, passwords, webhook URLs, or any credentials to this repo
+- **NEVER** hardcode secrets in worker completion notes — use placeholders like `<redacted>` or `get from app Settings → General`
+- All secrets live in `compose/.env`, `queue-cleaner.env`, `rdt-blocklist.env` on media-vm only
+- These files are in `.gitignore` and must never be force-added
+- If a secret was accidentally committed: stop, tell the user immediately, do NOT push
+- API keys in docs must use format: `get from Sonarr Settings → General → API Key`
+
+---
+
 ## Project purpose
 
 Native systemd service stack for a self-hosted Debian 12 media server

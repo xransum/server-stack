@@ -3,6 +3,12 @@
 This directory contains isolated job definitions for remaining homelab work.
 Each worker is a self-contained session that does one job and nothing else.
 
+## ⚠️ Security Rule — All Workers
+
+**NEVER commit API keys, tokens, passwords, or webhook URLs to this repo.**
+Use placeholders like `<redacted>` or `get from app Settings → General`.
+If you accidentally commit a secret, stop immediately and tell the user before pushing.
+
 ## How it works
 
 1. **Start a worker session** — paste the worker's opening prompt verbatim
@@ -21,6 +27,7 @@ Each worker is a self-contained session that does one job and nothing else.
 | [Worker 3](worker-3-gameservers.md) | Create gameservers-vm + Pelican Panel | ⏳ pending | Anytime (independent) |
 | [Worker 4](worker-4-devboxes.md) | Create devbox-template VM | ⏳ pending | Anytime (independent) |
 | [Worker 5](worker-5-portainer.md) | Portainer CE Docker management UI | ⏳ pending | Anytime (independent) |
+| [Worker 6](worker-6-seerr.md) | Migrate Overseerr → Seerr | ⏳ pending | Anytime (independent) |
 
 ## Parent session
 

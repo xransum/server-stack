@@ -19,6 +19,8 @@ When your job is complete, update the ## Status section of this file to "✅ com
 add a ## Completion Notes section describing what was done and any decisions that shifted,
 commit this file, push it, then ask me to confirm everything looks good before closing.
 
+SECURITY: NEVER commit API keys, tokens, passwords, or webhook URLs to the repo. Use placeholders only. If you accidentally do, stop immediately and tell the user before pushing.
+
 Context file: docs/workers/worker-5-portainer.md in the xransum/server-stack repo.
 ```
 

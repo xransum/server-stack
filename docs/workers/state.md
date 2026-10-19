@@ -81,6 +81,7 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 | Worker 3 — Game Servers | ⏳ pending | Independent, anytime |
 | Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
 | Worker 5 — Portainer | ⏳ pending | Independent, anytime |
+| Worker 6 — Seerr Migration | ⏳ pending | Independent, anytime |
 
 ---
 
