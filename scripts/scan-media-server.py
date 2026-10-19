@@ -61,7 +61,7 @@ def notify_discord(message: str) -> None:
         req = urlrequest.Request(
             DISCORD_WEBHOOK_URL,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "User-Agent": "scan-media/1.0"},
             method="POST",
         )
         with urlrequest.urlopen(req, timeout=10):
@@ -129,7 +129,10 @@ def blocklist_release(service: str, media_id: str, download_id: str, source_titl
 
 def scan_directory(path: str) -> tuple[int, list[str]]:
     """
-    Run clamdscan recursively on the parent directory of the given path.
+    Run clamscan recursively on the parent directory of the given path.
+    Uses the definitions already loaded by clamd (/var/lib/clamav) to avoid
+    reloading on every scan. clamscan is the standalone scanner — no daemon
+    client binary (clamdscan) is available in debian:12-slim's clamav package.
     Returns (exit_code, list_of_infected_file_paths).
     Exit codes: 0=clean, 1=infected, 2=error.
     """
@@ -138,16 +141,16 @@ def scan_directory(path: str) -> tuple[int, list[str]]:
 
     try:
         result = subprocess.run(
-            ["clamdscan", "--socket", CLAMD_SOCKET, "--recursive", "--no-summary", scan_dir],
+            ["clamscan", "--recursive", "--no-summary", scan_dir],
             capture_output=True,
             text=True,
             timeout=600,  # 10 min max
         )
     except subprocess.TimeoutExpired:
-        log.error("clamdscan timed out for %s", scan_dir)
+        log.error("clamscan timed out for %s", scan_dir)
         return 2, []
     except FileNotFoundError:
-        log.error("clamdscan not found")
+        log.error("clamscan not found")
         return 2, []
 
     infected: list[str] = []
