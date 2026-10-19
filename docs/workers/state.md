@@ -27,19 +27,20 @@ Profiles active: `media`, `indexers`, `proxy`, `cloudflare-bypass`
 | Container | Status | Notes |
 |---|---|---|
 | plex | ✅ | Libraries loaded, software transcode only (no GPU yet) |
-| overseerr | ✅ | |
+| overseerr | ✅ | Fixed: Docker service names, correct paths |
 | tautulli | ✅ | |
 | calibre-web | ✅ | Books imported, inotify watcher active |
 | sonarr | ✅ | Root: /mnt/media/tv |
-| radarr | ✅ | Root: /mnt/media/movies |
-| prowlarr | ✅ | 7 indexers, Byparr stack running |
-| rdt-client | ✅ | Using NAS DB at /mnt/media/downloads/rdtclient.db |
-| queue-cleaner | ✅ | DRY_RUN=false |
-| rdt-blocklist | ✅ | DRY_RUN=false |
+| radarr | ✅ | Root: /mnt/media/movies, collections fixed |
+| prowlarr | ✅ | Indexers synced, TPB working, 1337x disabled (upstream Byparr issue) |
+| rdt-client | ✅ | Using NAS DB, FinishedAction=2 (deletes local files after import) |
+| queue-cleaner | ✅ | DRY_RUN=false, new API keys |
+| rdt-blocklist | ✅ | DRY_RUN=false, new API keys |
+| scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
 | nginx-proxy-manager | ✅ | |
 | cloudflared | ✅ | Tunnel connected |
 | cloudflare-ddns | ✅ | Updates every 5min |
-| byparr + proxies | ✅ | |
+| byparr + proxies | ✅ | TPB working, 1337x disabled |
 
 Known issues (cosmetic, not blocking):
 - Sonarr/Radarr indexer backoff warnings (auto-recover)
@@ -64,10 +65,10 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 
 ## Serverhub (192.168.1.166)
 
-- All services STOPPED
-- Media files on local RAID — NAS is source of truth (sizes match)
-- Pending decommission (Worker 2)
-- RTX 2070 still installed here — needs to move to Proxmox (Worker 1 trigger)
+- **DECOMMISSIONED** ✅ — powered off 2026-10-19
+- RTX 2070 still installed (needs to move to Proxmox for Worker 1)
+- Game server home dirs preserved: `/home/minecraft/`, `/home/steam/`
+- Media files on RAID intact (not deleted — kept as backup reference)
 
 ---
 
@@ -75,8 +76,8 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 
 | Worker | Status | Notes |
 |---|---|---|
-| Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox |
-| Worker 2 — Decommission | ⚠️ scope updated | Overseerr issue needs fixing first |
+| Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox (after serverhub powered off) |
+| Worker 2 — Decommission | ✅ completed | Serverhub powered off, all services fixed |
 | Worker 3 — Game Servers | ⏳ pending | Independent, anytime |
 | Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
 | Worker 5 — Portainer | ⏳ pending | Independent, anytime |
