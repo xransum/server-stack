@@ -3,6 +3,7 @@ FROM debian:12-slim
 LABEL org.opencontainers.image.description="scan-media: ClamAV scanning sidecar for Radarr/Sonarr. Scans imported files, deletes infected ones, blocklists the release, and notifies Discord."
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     clamav \
     clamav-daemon \
     clamav-freshclam \
