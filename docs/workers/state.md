@@ -41,6 +41,7 @@ Profiles active: `media`, `indexers`, `proxy`, `cloudflare-bypass`
 | cloudflared | ✅ | Tunnel connected |
 | cloudflare-ddns | ✅ | Updates every 5min |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
+| portainer | ✅ | docker.xransum.com, Tailscale-only, Let's Encrypt cert via DNS-01 |
 
 Known issues (cosmetic, not blocking):
 - Sonarr/Radarr indexer backoff warnings (auto-recover)
@@ -55,11 +56,13 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 
 ### Grey cloud (direct A record, DDNS-managed by cloudflare-ddns on media-vm)
 - plex.xransum.com → home IP 96.231.19.234 → router → media-vm:443 (NPM+SSL) + 32400 (direct)
+- docker.xransum.com → 100.107.1.14 (Tailscale IP, static — NOT managed by cloudflare-ddns)
 - mc1, mc2, valheim, satisfactory, factorio → home IP (port forwards NOT YET set up — pending gameservers-vm)
 
 ### SSL
 - All CF tunnel services: valid Let's Encrypt cert via Cloudflare (auto-managed)
 - plex.xransum.com: Let's Encrypt cert via NPM DNS challenge (expires 2027-01-17)
+- docker.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare (expires 2027-01-17)
 
 ---
 
@@ -80,7 +83,7 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 | Worker 2 — Decommission | ✅ completed | Serverhub powered off, all services fixed |
 | Worker 3 — Game Servers | ⏳ pending | Independent, anytime |
 | Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
-| Worker 5 — Portainer | ⏳ pending | Independent, anytime |
+| Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ⏳ pending | Independent, anytime |
 
 ---
