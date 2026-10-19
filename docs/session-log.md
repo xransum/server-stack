@@ -9,6 +9,24 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — serverhub decommissioned (Worker 2)
+
+**Context:** Ran Worker 2 decommission job. media-vm confirmed as sole production server.
+
+**Completed:**
+- Verified all 17 containers on media-vm are up and healthy.
+- Confirmed NAS media sizes match serverhub RAID exactly (2.2T movies, 5.7T TV).
+- User confirmed router port forwards switched: 32400 TCP and 443 TCP → 192.168.1.169 (media-vm).
+- Verified plex.xransum.com responds over HTTPS (401 auth required = healthy).
+- Stopped and disabled all serverhub systemd services (plexmediaserver, sonarr, radarr, prowlarr, tautulli, rdt-client, rdt-blocklist, overseerr, byparr).
+- Powered off serverhub (192.168.1.166).
+
+**Deferred:**
+- Media file deletion from serverhub RAID (`/mnt/raid0/media/`) — explicitly deferred to a separate worker job. All data intact on serverhub; NAS is source of truth.
+- Game server data (`/home/minecraft/`, `/home/steam/`) untouched — pending Worker 3 migration to gameservers-vm.
+
+---
+
 ## 2026-10-19 — media-vm fully operational; migration complete; worker system established
 
 **Context:** Completed full migration from serverhub to media-vm. All services

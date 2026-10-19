@@ -1,7 +1,7 @@
 # Worker 2 — Decommission Serverhub
 
 ## Status
-⏳ pending
+✅  completed
 
 ## Trigger
 Independent — can be started anytime. Does not depend on Worker 1.
@@ -134,4 +134,14 @@ Add an entry to `docs/session-log.md` noting serverhub decommissioned on this da
 
 ## Completion Notes
 
-(fill in when done)
+Completed 2026-10-19.
+
+- All 17 media-vm containers confirmed up and healthy before proceeding.
+- NAS media sizes matched serverhub RAID exactly (2.2T movies, 5.7T TV) — NAS confirmed as source of truth.
+- Router port forwards (32400 TCP, 443 TCP → 192.168.1.169) confirmed switched by user.
+- `plex.xransum.com` verified accessible over HTTPS externally (401 response = auth wall, cert valid).
+- All serverhub systemd services stopped and disabled (plexmediaserver, sonarr, radarr, prowlarr, tautulli, rdt-client, rdt-blocklist, overseerr, byparr).
+- Serverhub powered off.
+
+**Decision shift — media deletion deferred:**
+Step 6 (delete media from serverhub RAID) was explicitly skipped at user request. Media files on `/mnt/raid0/media/` remain intact. This is a separate job. Game server dirs (`/home/minecraft/`, `/home/steam/`) were never touched per spec.
