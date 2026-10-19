@@ -1,18 +1,15 @@
 # compose/
 
-Docker Compose stack for the lab deployment target (`media-vm` and
-`gameservers-vm` on Proxmox). **Status: untested — awaiting lab hardware.**
-
-Native systemd on `serverhub` is current production. See
-`docs/migration.md` for the cutover plan.
+Docker Compose stack for `media-vm` and `gameservers-vm` on Proxmox.
+**Status: active — deployed on media-vm (192.168.1.169).**
 
 ---
 
 ## Prerequisites
 
-1. Debian 12 VM with Docker and Docker Compose v2 installed
-2. NFS mounts active (see `docs/storage.md` and `docs/proxmox-compute.md`)
-3. NVIDIA container toolkit installed in media-vm (for Plex NVENC)
+1. Ubuntu 24.04 VM with Docker and Docker Compose v2 installed
+2. NFS mounts active for all six `/mnt/media/*` subdirs (see `docs/storage.md`)
+3. NVIDIA container toolkit installed in media-vm (for Plex NVENC — defer until GPU passthrough is complete)
 4. `.env` file created from `.env.example` with secrets filled in
 
 ---
@@ -23,21 +20,28 @@ Native systemd on `serverhub` is current production. See
 
 | Profile | Services |
 |---|---|
-| `media` | Plex, Tautulli, Overseerr |
-| `indexers` | Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner |
+| `media` | Plex, Tautulli, Overseerr, Calibre-Web |
+| `indexers` | Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist |
 | `cloudflare-bypass` | Byparr, byparr-unwrap, byparr-proxy-1337x, byparr-proxy-apibay |
-| `proxy` | Cloudflare Tunnel (reverse proxy TBD — see open decisions) |
-| `s3` | S3 service placeholder (TBD — see open decisions) |
-| `infra` | dns-updater (deprecated if CF Tunnel is active) |
+| `proxy` | Nginx Proxy Manager + Cloudflare Tunnel |
+| `s3` | Reserved (MinIO runs natively on TrueNAS — no active services) |
+| `infra` | dns-updater (deprecated — CF Tunnel replaces this) |
 
 ### Quick start (full media stack)
 
 ```bash
 cd compose/
 cp .env.example .env
-# edit .env — fill in PLEX_CLAIM, CLOUDFLARE_TUNNEL_TOKEN, API keys
+# edit .env — fill in PLEX_CLAIM, CLOUDFLARE_TUNNEL_TOKEN
 
-docker compose --profile media --profile indexers --profile cloudflare-bypass --profile proxy up -d
+# Proxy first so NPM is ready before services come up
+docker compose --profile proxy up -d
+
+# Then media + indexers
+docker compose --profile media --profile indexers up -d
+
+# Cloudflare bypass indexers (after Prowlarr is configured)
+docker compose --profile cloudflare-bypass up -d
 ```
 
 ### Custom Cardigann definitions
@@ -55,13 +59,15 @@ cp definitions/*.yml compose/custom-definitions/
 
 | Service | URL |
 |---|---|
-| Plex | http://media-vm:32400/web |
-| Sonarr | http://media-vm:8989 |
-| Radarr | http://media-vm:7878 |
-| Prowlarr | http://media-vm:9696 |
-| Overseerr | http://media-vm:5055 |
-| Tautulli | http://media-vm:8181 |
-| rdt-client | http://media-vm:6500 |
+| Plex | http://192.168.1.169:32400/web |
+| Sonarr | http://192.168.1.169:8989 |
+| Radarr | http://192.168.1.169:7878 |
+| Prowlarr | http://192.168.1.169:9696 |
+| Overseerr | http://192.168.1.169:5055 |
+| Tautulli | http://192.168.1.169:8181 |
+| rdt-client | http://192.168.1.169:6500 |
+| Calibre-Web | http://192.168.1.169:8083 |
+| NPM admin | http://192.168.1.169:81 |
 
 ---
 
@@ -107,11 +113,11 @@ docker compose -f docker-compose.gameservers.yml up -d
 
 ---
 
-## Open decisions
+## Resolved decisions
 
-| Decision | Notes |
+| Decision | Resolution |
 |---|---|
-| Reverse proxy | Caddy / Nginx Proxy Manager / Traefik / nginx. Uncomment the placeholder in `docker-compose.yml` when decided. |
-| S3 service | Garage / MinIO / Nextcloud. Uncomment the placeholder in `docker-compose.yml` when decided. |
+| Reverse proxy | **Nginx Proxy Manager** — web UI, easy SSL via Let's Encrypt Cloudflare DNS-01 |
+| S3 service | **MinIO on TrueNAS** — runs as a native TrueNAS app, not in this stack |
 
 See `docs/proxmox-compute.md` for full tradeoff discussion.

@@ -9,6 +9,59 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-18 — media-vm deployment started; SSH hardening; compose updates
+
+**Context:** Proxmox hardware arrived and media-vm (Ubuntu 24.04, 192.168.1.169)
+was provisioned. Started active deployment of the Docker Compose stack.
+serverhub is still running as production while media-vm is being set up.
+
+**SSH:**
+- Generated `homelab` ed25519 key (`~/.ssh/homelab`) as the single key for
+  all homelab hosts (proxmox, media-vm, truenas, future VMs).
+- Deployed to: `root@192.168.1.168` (proxmox), `ransum@192.168.1.169` (media-vm),
+  `truenas_admin@192.168.1.164` (truenas, via web UI).
+- Hardened proxmox: `PermitRootLogin prohibit-password`, `PasswordAuthentication no`.
+- Hardened media-vm: `PasswordAuthentication no`.
+- TrueNAS already blocks password SSH — key-only by default.
+- SSH config aliases: `proxmox`, `media-vm`, `truenas` all use `homelab` key.
+
+**NFS discovery:**
+- TrueNAS exports 6 separate NFS shares (not one `/mnt/media`):
+  `movies`, `tv`, `music`, `audiobooks`, `books`, `downloads` — all under
+  `/mnt/media/`, all scoped to `192.168.1.0/24`, all rw.
+- Updated compose fstab comment and all service volume mounts to match the
+  per-directory pattern instead of the previous single `/mnt/media` mount.
+
+**Compose fixes:**
+- `docker-compose.yml` header updated from Debian 12 → Ubuntu 24.04, status
+  changed from UNTESTED to ACTIVE.
+- All NFS volume mounts updated to per-subdir pattern (each service only mounts
+  what it needs).
+- Added `calibre-web` service to `media` profile (port 8083,
+  `DOCKER_MODS=linuxserver/mods:universal-calibre`, `/mnt/media/books:/books`).
+- Added `calibre-web-config` named volume.
+- Fixed `rdt-blocklist` Dockerfile: `USER nobody` → `USER 1000` (nobody cannot
+  read the rdt-client DB owned by UID 1000 — would silently fail at runtime).
+- Fixed `compose/.env.example`: `PELICAN_DB_PASSWORD=changeme` → empty string.
+- Updated `compose/README.md`: fixed Debian 12 → Ubuntu 24.04, added
+  calibre-web to profiles/service URL tables, marked reverse proxy (NPM) and
+  S3 (MinIO on TrueNAS) open decisions as resolved.
+
+**Security note (serverhub):**
+- Discovered XMRig cryptominer running as `plex` user on serverhub, dropped
+  via Plex RCE exploit (port 32400 was open to internet on Plex v1.42.2).
+- Killed miner, updated Plex to v1.43.4, locked port 32400 to LAN only.
+- Friends access Plex via app.plex.tv relay (no inbound port needed).
+- rkhunter and ClamAV scans run — no persistence found.
+
+**Deferred:**
+- PCIe passthrough (RTX 2070) to media-vm — deferred until stack is confirmed
+  working. Plex will software transcode until then.
+- NFS mounts on media-vm — next step.
+- `.env` creation and stack bring-up — next step.
+
+---
+
 ## 2026-10-08 -- Game servers move to Pelican; service inventory + deprecations
 
 **Context:** Finalized the game-server subsystem for the Proxmox migration and

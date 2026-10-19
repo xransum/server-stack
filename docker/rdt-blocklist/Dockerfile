@@ -7,7 +7,7 @@ WORKDIR /app
 COPY scripts/rdt-blocklist.py .
 
 # Needs read access to the rdt-client database on the host.
-# Run as media (UID 1000) to match the rdt-client service user.
-USER nobody
+# Run as UID 1000 to match the rdt-client service user (PUID=1000).
+USER 1000
 
 ENTRYPOINT ["python", "-u", "/app/rdt-blocklist.py"]

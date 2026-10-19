@@ -1,8 +1,7 @@
 # Docker Compose — media-vm stack
 #
-# Target: media-vm on Proxmox compute server (Debian 12 + Docker).
-# Status: UNTESTED — awaiting lab hardware. Native systemd on serverhub
-#         is current production. See docs/migration.md for cutover plan.
+# Target: media-vm on Proxmox compute server (Ubuntu 24.04 + Docker).
+# Status: ACTIVE — deployed on media-vm (192.168.1.169).
 #
 # Usage:
 #   docker compose --profile media up -d
@@ -10,19 +9,23 @@
 #   docker compose --profile proxy up -d
 #
 # Profiles:
-#   media              Plex, Tautulli, Overseerr
-#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner
+#   media              Plex, Tautulli, Overseerr, Calibre-Web
+#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist
 #   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
 #   proxy              Nginx Proxy Manager (reverse proxy + SSL) + Cloudflare Tunnel
 #   s3                 Reserved profile (MinIO runs natively on TrueNAS)
 #   infra              dns-updater (deprecated — CF Tunnel replaces this)
 #
 # NFS mounts (add to /etc/fstab on media-vm before starting):
-#   nas-ip:/mnt/media  /mnt/media  nfs  rw,sync,hard,intr,rsize=131072,wsize=131072,noatime  0 0
-#   nas-ip:/mnt/s3     /mnt/s3     nfs  rw,sync,hard,intr  0 0
+#   192.168.1.164:/mnt/media/movies      /mnt/media/movies      nfs  rw,hard,intr,_netdev,noatime  0  0
+#   192.168.1.164:/mnt/media/tv          /mnt/media/tv          nfs  rw,hard,intr,_netdev,noatime  0  0
+#   192.168.1.164:/mnt/media/music       /mnt/media/music       nfs  rw,hard,intr,_netdev,noatime  0  0
+#   192.168.1.164:/mnt/media/audiobooks  /mnt/media/audiobooks  nfs  rw,hard,intr,_netdev,noatime  0  0
+#   192.168.1.164:/mnt/media/books       /mnt/media/books       nfs  rw,hard,intr,_netdev,noatime  0  0
+#   192.168.1.164:/mnt/media/downloads   /mnt/media/downloads   nfs  rw,hard,intr,_netdev,noatime  0  0
 #
-# CRITICAL: downloads and media must be on the same NFS mount so Sonarr/Radarr
-#           can hardlink on import instead of copy. Do not split them.
+# CRITICAL: downloads and media must be on the same NFS server so Sonarr/Radarr
+#           can hardlink on import instead of copy. All mounts are from 192.168.1.164.
 #
 # See docs/storage.md, docs/proxmox-compute.md, docs/migration.md.
 
@@ -54,7 +57,10 @@ services:
       PLEX_CLAIM: ${PLEX_CLAIM:-}   # https://www.plex.tv/claim — optional, only needed first run
     volumes:
       - plex-config:/config
-      - /mnt/media:/mnt/media:ro
+      - /mnt/media/movies:/mnt/media/movies:ro
+      - /mnt/media/tv:/mnt/media/tv:ro
+      - /mnt/media/music:/mnt/media/music:ro
+      - /mnt/media/audiobooks:/mnt/media/audiobooks:ro
     # NVIDIA GPU passthrough for NVENC hardware transcoding (Plex Pass required)
     deploy:
       resources:
@@ -88,6 +94,20 @@ services:
     ports:
       - "5055:5055"
 
+  calibre-web:
+    <<: *restart-policy
+    image: lscr.io/linuxserver/calibre-web:latest
+    profiles: [media]
+    container_name: calibre-web
+    environment:
+      <<: *puid-pgid
+      DOCKER_MODS: linuxserver/mods:universal-calibre
+    volumes:
+      - calibre-web-config:/config
+      - /mnt/media/books:/books
+    ports:
+      - "8083:8083"
+
   # ---------------------------------------------------------------------------
   # INDEXERS profile
   # ---------------------------------------------------------------------------
@@ -101,9 +121,9 @@ services:
       <<: *puid-pgid
     volumes:
       - sonarr-config:/config
-      # IMPORTANT: mount the full /mnt/media so hardlinks work between
-      # downloads/complete and tv/ — they must be on the same filesystem.
-      - /mnt/media:/mnt/media
+      # IMPORTANT: tv and downloads must be on the same NFS server for hardlinks.
+      - /mnt/media/tv:/mnt/media/tv
+      - /mnt/media/downloads:/mnt/media/downloads
     ports:
       - "8989:8989"
 
@@ -116,7 +136,9 @@ services:
       <<: *puid-pgid
     volumes:
       - radarr-config:/config
-      - /mnt/media:/mnt/media
+      # IMPORTANT: movies and downloads must be on the same NFS server for hardlinks.
+      - /mnt/media/movies:/mnt/media/movies
+      - /mnt/media/downloads:/mnt/media/downloads
     ports:
       - "7878:7878"
 
@@ -175,7 +197,7 @@ services:
     env_file:
       - ${RDT_BLOCKLIST_ENV:-./rdt-blocklist.env}
     volumes:
-      # Mount the rdt-client database read-only. Must be on the same NFS mount.
+      # Mount downloads read-only — only needs access to rdtclient.db.
       - /mnt/media/downloads:/mnt/media/downloads:ro
     depends_on:
       - rdt-client
@@ -323,6 +345,7 @@ volumes:
   plex-config:
   tautulli-config:
   overseerr-config:
+  calibre-web-config:
   sonarr-config:
   radarr-config:
   prowlarr-config:
