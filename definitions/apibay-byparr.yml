@@ -5,7 +5,8 @@
 # Changes from upstream:
 #   - id/name renamed so both can coexist in Prowlarr
 #   - search path host hardcoded to the local byparr-proxy URL
-#     (http://127.0.0.1:8882). The upstream uses a {{ .Config.apiurl }}
+#     (http://byparr-proxy-apibay:8882 in Docker, http://127.0.0.1:8882 in native systemd).
+#     The upstream uses a {{ .Config.apiurl }}
 #     template var, but Prowlarr's Cardigann implementation URL-encodes
 #     every templated value in the search path, which mangles the `:`
 #     in `host:port` into `%3A` and trips .NET's Uri parser with
@@ -19,11 +20,9 @@
 # Requires:
 #   /etc/byparr-proxy/apibay.env  (PORT=8882, UPSTREAM=https://apibay.org,
 #                                  BYPARR=http://127.0.0.1:8193/v1 to use unwrap sidecar)
-#   byparr-proxy@apibay.service   enabled and active
-#   byparr-unwrap.service         enabled and active (apibay returns JSON; Byparr
-#                                                     wraps non-HTML in plaintext-viewer HTML)
-#
-# See docs/byparr-proxy.md for the full picture.
+#   Docker Compose: byparr-proxy-apibay container on port 8882, byparr-unwrap container on port 8193
+#   Native systemd: byparr-proxy@apibay.service on 127.0.0.1:8882, byparr-unwrap.service on 127.0.0.1:8193
+#                                  BYPARR=http://byparr-unwrap:8193/v1 for Docker)
 id: apibay-byparr
 name: ThePirateBay (via Byparr)
 description: "The Pirate Bay (apibay JSON API), routed through byparr-proxy to defeat Turnstile."
@@ -107,7 +106,7 @@ settings:
   - name: info_apiurl
     type: info
     label: API URL (byparr-proxy)
-    default: "This indexer is hardcoded to call <b>http://127.0.0.1:8882/</b> (the byparr-proxy@apibay instance). To change it, edit the <code>search.paths[0].path</code> in <code>/var/lib/prowlarr/Definitions/Custom/apibay-byparr.yml</code>. Templating a host:port here doesn't work because Prowlarr's Cardigann URL-encodes substituted values and mangles the <code>:</code>."
+    default: "This indexer is hardcoded to call <b>http://byparr-proxy-apibay:8882/</b> (the byparr-proxy-apibay container). To change it, edit the <code>search.paths[0].path</code> in <code>/var/lib/docker/volumes/server-stack_prowlarr-config/_data/Definitions/Custom/apibay-byparr.yml</code> on media-vm. Templating a host:port here doesn't work because Prowlarr's Cardigann URL-encodes substituted values and mangles the <code>:</code>."
   - name: uploader
     type: text
     label: Filter by Uploader
@@ -118,7 +117,7 @@ settings:
 
 search:
   paths:
-    - path: "http://127.0.0.1:8882/{{ if .Keywords }}q.php?q={{ .Keywords }}&cat={{ join .Categories \",\" }}{{ else }}precompiled/data_top100_recent.json{{ end }}"
+    - path: "http://byparr-proxy-apibay:8882/{{ if .Keywords }}q.php?q={{ .Keywords }}&cat={{ join .Categories \",\" }}{{ else }}precompiled/data_top100_recent.json{{ end }}"
       response:
         type: json
 

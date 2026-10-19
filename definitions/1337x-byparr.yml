@@ -7,9 +7,11 @@ type: public
 encoding: UTF-8
 requestDelay: 3
 links:
-  # Match the PORT in /etc/byparr-proxy/1337x.env. Default port pairing
+  # Native systemd: 127.0.0.1:8881 (byparr-proxy runs on same host)
+  # Docker Compose: byparr-proxy-1337x:8881 (Docker service name on same network)
+  # Match the PORT in docker/<service>/example.env. Default port pairing
   # in this stack is 8881 -> 1337x. Update both sides if you change it.
-  - http://127.0.0.1:8881/
+  - http://byparr-proxy-1337x:8881/
 
 caps:
   categorymappings:

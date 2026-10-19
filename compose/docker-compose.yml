@@ -231,7 +231,7 @@ services:
     environment:
       PORT: "8193"
       LOG_LEVEL: INFO
-      BYPARR: http://byparr:8191/v1
+      UNWRAP_UPSTREAM_URL: http://byparr:8191/v1   # script reads UNWRAP_UPSTREAM_URL, not BYPARR
     ports:
       - "8193:8193"
     depends_on:
