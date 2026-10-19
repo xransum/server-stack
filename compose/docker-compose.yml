@@ -110,6 +110,17 @@ services:
     ports:
       - "8083:8083"
 
+  portainer:
+    <<: *restart-policy
+    image: portainer/portainer-ce:latest
+    profiles: [media]
+    container_name: portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    ports:
+      - "9443:9443"
+
   # ---------------------------------------------------------------------------
   # INDEXERS profile
   # ---------------------------------------------------------------------------
@@ -399,3 +410,4 @@ volumes:
   nginx-pm-letsencrypt:
   # ClamAV virus definition database — persisted to avoid re-downloading on restart
   clamav-db:
+  portainer-data:
