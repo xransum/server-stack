@@ -53,11 +53,55 @@ log = logging.getLogger("scan-media")
 # Discord
 # ---------------------------------------------------------------------------
 
-def notify_discord(message: str) -> None:
+def notify_discord_infected(source_title: str, service: str, deleted: list[str]) -> None:
     if not DISCORD_WEBHOOK_URL:
         return
+    files_value = "\n".join(f"`{Path(f).name}`" for f in deleted) or "`(unknown)`"
+    payload = json.dumps({
+        "username": "Malware Scanner",
+        "embeds": [{
+            "title": "\U0001f6a8 Malicious File Detected",
+            "color": 15158332,  # red
+            "fields": [
+                {"name": "Release", "value": source_title, "inline": False},
+                {"name": "Service", "value": service.capitalize(), "inline": True},
+                {"name": "Action", "value": "Deleted + Blocklisted", "inline": True},
+                {"name": "Files Nuked", "value": f"```{chr(10).join(Path(f).name for f in deleted)}```", "inline": False},
+            ],
+            "footer": {"text": "This release has been blocklisted and will not be grabbed again."},
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        }],
+    }).encode()
     try:
-        payload = json.dumps({"content": message}).encode()
+        req = urlrequest.Request(
+            DISCORD_WEBHOOK_URL,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "scan-media/1.0"},
+            method="POST",
+        )
+        with urlrequest.urlopen(req, timeout=10):
+            pass
+    except Exception as exc:
+        log.warning("Discord notification failed: %s", exc)
+
+
+def notify_discord_error(file_path: str, exit_code: int) -> None:
+    if not DISCORD_WEBHOOK_URL:
+        return
+    payload = json.dumps({
+        "username": "Malware Scanner",
+        "embeds": [{
+            "title": "\u26a0\ufe0f ClamAV Scan Error",
+            "color": 15105570,  # orange
+            "fields": [
+                {"name": "File", "value": f"`{Path(file_path).name}`", "inline": False},
+                {"name": "Exit Code", "value": str(exit_code), "inline": True},
+                {"name": "Action", "value": "File kept — manual review needed", "inline": True},
+            ],
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        }],
+    }).encode()
+    try:
         req = urlrequest.Request(
             DISCORD_WEBHOOK_URL,
             data=payload,
@@ -238,15 +282,7 @@ class Handler(BaseHTTPRequestHandler):
             source_title = Path(file_path).parent.name
 
             blocklist_release(service, media_id, download_id, source_title)
-
-            infected_list = "\n".join(f"- `{Path(f).name}`" for f in deleted)
-            notify_discord(
-                f":biohazard: **Malicious file(s) detected and deleted**\n"
-                f"**Release:** {source_title}\n"
-                f"**Service:** {service.capitalize()}\n"
-                f"**Files nuked:**\n{infected_list}\n"
-                f"Release has been blocklisted — it will not be grabbed again."
-            )
+            notify_discord_infected(source_title, service, deleted)
             log.error("INFECTED — deleted %d file(s), blocklisted in %s", len(deleted), service)
             # Return 500 so Radarr/Sonarr mark the import as failed
             self._respond(500, {"status": "infected", "deleted": deleted})
@@ -254,11 +290,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             # Scan error
             log.error("Scan error (exit %d) for %s", exit_code, file_path)
-            notify_discord(
-                f":warning: **ClamAV scan error** (exit {exit_code})\n"
-                f"**File:** {display_name}\n"
-                f"File has been kept — manual review recommended."
-            )
+            notify_discord_error(file_path, exit_code)
             self._respond(200, {"status": "scan_error", "exit_code": exit_code})
 
 
