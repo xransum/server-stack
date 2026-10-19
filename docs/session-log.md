@@ -9,6 +9,83 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — Worker 3: gameservers-vm + Pelican Panel + Wings
+
+### What was done
+
+- Created `gameservers-vm` (VM ID 101) on Proxmox: Ubuntu 24.04, 12 vCPU,
+  32GB RAM, 512GB disk (q35/UEFI), VirtIO NIC on vmbr0, static IP 192.168.1.170
+- Installed: Tailscale (100.117.244.86), Docker, qemu-guest-agent,
+  passwordless sudo for ransum, homelab pubkey, Wings binary v1.0.0-rc.1
+- Added `gameservers-vm` and `gameservers-vm-ts` to Windows SSH config
+- Deployed Pelican Panel via Docker Compose (ghcr.io/pelican/panel:latest,
+  SQLite, BEHIND_PROXY=true); panel accessible at https://pelican.xransum.com
+- Wings runs as native systemd binary (not Docker); config at /etc/pelican/config.yml
+- Wings WebSocket routing: CF Tunnel → NPM (media-vm) → Wings:8080 (plain HTTP).
+  Direct LAN DNS approach failed due to modern browser Private Network Access
+  protection blocking public domains resolving to RFC-1918 IPs. CF tunnel is
+  the correct architecture for this.
+- Let's Encrypt cert for gameservers-vm.xransum.com via certbot DNS-01/Cloudflare
+  (used for Wings SSL initially, then abandoned in favour of NPM termination)
+- NFS backup target: created media/gameservers dataset on TrueNAS, exported,
+  mounted at /mnt/gameservers on gameservers-vm. Note: doc said /mnt/dev/gameservers
+  but dev pool doesn't exist — corrected to media/gameservers.
+- Pelican node registered: FQDN gameservers-vm.xransum.com, port 443,
+  HTTPS with reverse proxy, Wings listening on 8080 plain HTTP behind NPM
+- DNS: pelican.xransum.com CNAME → tunnel, gameservers-vm.xransum.com CNAME → tunnel
+  both orange-cloud through CF tunnel → NPM → respective backends
+- Added mc1/mc2/mc3/valheim/satisfactory/factorio SRV + A records;
+  cloudflare-ddns updated to manage mc3.xransum.com
+- Port forwards on router: 25565/25566/25567 TCP → 192.168.1.170
+
+### Game servers migrated from serverhub (/home/minecraft/)
+
+All 7 servers rsync'd from minecraft@serverhub, ownership set to pelican:pelican,
+auto-restart disabled in each server_start.sh:
+
+| Pelican Name | Dir | Egg | Java | Pelican UUID |
+|---|---|---|---|---|
+| All The Mods 10 (v7.1) | atm10-71 | NeoForge 21.1.234 | 21 | 83c95aef-... |
+| All The Mods 10 (v4.5) | atm10 | NeoForge 21.1.191 | 21 | a4595ff6-... |
+| All The Mods 9 (v0.3.2) | atm9 | Forge 1.20.1-47.3.7 | 17 | 5f275f4a-... |
+| All The Mods 9 Skyblock (v1.1.1) | atm9-sb | Forge 1.20.1-47.2.20 | 17 | 39d94756-... |
+| Better Minecraft 4 (v30.5) | bmc4 | Forge 1.20.1-47.3.3 | 17 | 1b557ac4-... |
+| Distant Horizons + Iris (v0.4.2) | dh-iris | Fabric | 21 | 1ca0348a-... |
+| Sky Factory 4 (v4.2.4) | skyfactory-4 | Forge 1.12.2 | 8 | 276e9e1c-... |
+
+All servers assigned to allocation mc1:25565; reassign in Pelican UI when
+running multiple simultaneously.
+
+### Decisions made
+
+- Wings as native systemd binary, not Docker — official Pelican install method;
+  no Docker image exists for Wings
+- SQLite for Panel DB — sufficient for single-node homelab, no MariaDB/Redis needed
+- Pelican compose file simplified from original (dropped MariaDB, Redis, Wings
+  container) to match actual Pelican Docker install docs (image was also wrong:
+  pelican-dev → pelican)
+- Wings WebSocket through CF Tunnel (not direct LAN DNS) — browser Private
+  Network Access blocks public domains resolving to LAN IPs in modern Chrome/Firefox
+- NFS live game data rejected — live worlds stay on gameservers-vm local disk;
+  NAS used for Pelican backups only
+- server_start.sh used as startup command for all modpack servers — handles
+  NeoForge/Forge self-install on first boot, avoids needing to run installer manually
+- dh-iris uses hardcoded java startup command instead of server_start.sh
+  (script hardcoded /usr/lib/jvm/msopenjdk-25-amd64/bin/java, doesn't exist in container)
+- Auto-restart disabled in all server_start.sh scripts (Pelican manages restarts)
+- SRV records for mc1/mc2/mc3 so players connect without specifying port
+
+### State at end of session
+
+- pelican.xransum.com — Panel accessible, Wings online, node green
+- ATM10 v7.1 confirmed working: mc1.xransum.com connects in-game
+- 6 additional servers created in Panel with data migrated, not yet started
+- Steam game servers (serverhub /home/steam/) not migrated — no existing
+  worlds worth keeping, will create fresh when needed
+- Serverhub decommission still pending (Worker 2 scope)
+
+---
+
 ## 2026-10-19 — Worker 2 cleanup complete: rdt-client FinishedAction + download dir purge
 
 **Context:** Second session picking up Worker 2 remaining work. Main decommission was already complete; this session closed out the post-decommission cleanup items.

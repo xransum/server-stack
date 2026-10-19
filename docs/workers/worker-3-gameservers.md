@@ -1,7 +1,7 @@
 # Worker 3 — Game Servers
 
 ## Status
-⏳ pending
+✅  completed
 
 ## Trigger
 Independent — can be started anytime. Does not depend on other workers.
@@ -198,4 +198,56 @@ Commit any config changes. Update `docs/session-log.md`.
 
 ## Completion Notes
 
-(fill in when done)
+Completed 2026-10-19.
+
+### What was deployed
+
+- `gameservers-vm` created on Proxmox (VM 101): Ubuntu 24.04, 12 vCPU, 32GB RAM,
+  512GB NVMe (LVM-thin on data pool), static IP 192.168.1.170
+- Tailscale: 100.117.244.86
+- Pelican Panel: https://pelican.xransum.com (Docker, SQLite, CF Tunnel → NPM)
+- Wings: native systemd binary, plain HTTP on :8080, proxied via NPM on media-vm
+- NFS backup target: nas:/mnt/media/gameservers → /mnt/gameservers
+  (doc said /mnt/dev/gameservers but dev pool doesn't exist on TrueNAS)
+
+### Decisions that shifted from the plan
+
+- **Wings not Docker**: no official Pelican Docker image for Wings exists.
+  Native binary + systemd is the only supported install method.
+- **Pelican compose simplified**: original compose had wrong image names
+  (pelican-dev instead of pelican), MariaDB, Redis, and Wings container —
+  all removed. New compose is panel-only with SQLite.
+- **Wings WebSocket via CF Tunnel**: direct LAN DNS approach (grey-cloud A record
+  pointing to LAN IP) fails in modern browsers due to Private Network Access
+  protection. CF Tunnel → NPM → Wings is the correct architecture.
+- **NPM on media-vm proxies Wings**: gameservers-vm.xransum.com orange-cloud
+  CNAME → CF Tunnel → NPM (192.168.1.169) → Wings (192.168.1.170:8080).
+  NPM cert auto-renews via DNS-01 Cloudflare challenge.
+- **NAS path correction**: /mnt/dev/gameservers → /mnt/media/gameservers
+  (dev pool does not exist; media pool used instead).
+- **server_start.sh as startup command**: all modpack servers use ./server_start.sh
+  which self-installs the modloader on first boot. Auto-restart disabled in each
+  script (Pelican manages restarts).
+
+### Game servers migrated
+
+7 servers from serverhub:/home/minecraft/ → /var/lib/pelican/volumes/:
+
+| Server | Modloader | Java | UUID prefix |
+|---|---|---|---|
+| ATM10 v7.1 | NeoForge 21.1.234 | 21 | 83c95aef |
+| ATM10 v4.5 | NeoForge 21.1.191 | 21 | a4595ff6 |
+| ATM9 v0.3.2 | Forge 1.20.1-47.3.7 | 17 | 5f275f4a |
+| ATM9 Sky v1.1.1 | Forge 1.20.1-47.2.20 | 17 | 39d94756 |
+| BMC4 v30.5 | Forge 1.20.1-47.3.3 | 17 | 1b557ac4 |
+| DH + Iris v0.4.2 | Fabric | 21 | 1ca0348a |
+| Sky Factory 4 v4.2.4 | Forge 1.12.2 | 8 | 276e9e1c |
+
+ATM10 v7.1 confirmed working end-to-end (mc1.xransum.com connects in-game).
+Remaining 6 servers migrated but not yet started.
+
+### Not done (out of scope or deferred)
+
+- Steam game servers: no worlds worth keeping, will create fresh
+- Serverhub decommission: Worker 2 scope
+- Per-server Pelican backup schedules: set up when each server goes live
