@@ -1,7 +1,7 @@
 # Worker 5 — Portainer CE (Docker Management UI)
 
 ## Status
-⏳ pending
+✅  completed
 
 ## Trigger
 Independent — can be started anytime. Does not depend on other workers.
@@ -170,4 +170,20 @@ From a device connected to Tailscale:
 
 ## Completion Notes
 
-(fill in when done)
+Completed 2026-10-19.
+
+### What was done
+
+1. **`compose/docker-compose.yml`** — Added `portainer` service block in the `media` profile (after `calibre-web`) with Docker socket mount, `portainer-data` named volume, and port `9443:9443`. Added `portainer-data:` to the named volumes section. Committed and pushed (`bc60426`).
+
+2. **Deployed on media-vm** — `git stash` was required first because `docker/scan-media/Dockerfile` and `scripts/scan-media-server.py` had unstaged local changes on media-vm (likely from another in-progress worker). Stashed, pulled, deployed. Container came up healthy; `curl -sk https://localhost:9443` returned HTTP 200.
+
+3. **Cloudflare DNS** — Grey-cloud A record `docker.xransum.com → 100.107.1.14` created via `cf dns records create -z xransum.com --body ...`. Note: the `cf` CLI requires `-z <zone>` as a flag, not a positional argument — the syntax in the worker doc (`cf dns records create xransum.com ...`) was incorrect and was fixed during execution.
+
+4. **NPM proxy host** — Created via NPM API on media-vm (proxy host ID 13). Forwards `docker.xransum.com` → `https://portainer:9443` with `proxy_ssl_verify off` to accept Portainer's self-signed cert. No SSL cert on the NPM side (Tailscale-only, not public).
+
+### Decisions that shifted
+
+- **`cf` CLI syntax**: The worker doc showed `cf dns records create xransum.com --type A ...` (zone as positional arg). The installed `cf` CLI requires `-z xransum.com` (flag) with `--body` JSON. Used `--body` to pass all record fields cleanly.
+- **git stash on media-vm**: Not anticipated in the job steps. Media-vm had local uncommitted changes from another worker. Stashed before pulling; stash was not re-applied (those changes belong to another worker's session).
+- **No SSL cert on NPM proxy**: Portainer is Tailscale-only. NPM proxies HTTP → HTTPS internally with `proxy_ssl_verify off`. A Let's Encrypt cert could be added later if desired, but requires the domain to be reachable from the internet for DNS-01 or HTTP-01 challenge — not applicable here since the A record points to a Tailscale IP.
