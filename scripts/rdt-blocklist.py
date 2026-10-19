@@ -107,7 +107,7 @@ def get_stuck_torrents(db_path: str, patterns: list[str]) -> list[dict]:
     """Return rows from Torrents where Error matches any infringing pattern."""
     stuck = []
     try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        con = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
         rows = con.execute(
             "SELECT TorrentId, RdName, Error FROM Torrents "
             "WHERE Error IS NOT NULL AND Error != ''"
