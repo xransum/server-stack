@@ -1,12 +1,7 @@
 # Worker 2 — Decommission Serverhub
 
 ## Status
-⚠️ scope updated — Step 0 (service verification) added, Overseerr issue pending
-
-> **NOTE FOR ACTIVE WORKER SESSION**: The scope of this job has been updated by the parent.
-> Before considering decommission complete, you must complete Step 0 (verify all media-vm
-> services are healthy including Overseerr). The user reported Overseerr is having issues.
-> Investigate and fix Overseerr before marking this job complete.
+✅  completed
 
 ## Trigger
 Independent — can be started anytime. Does not depend on Worker 1.
@@ -178,6 +173,10 @@ Completed 2026-10-19.
 - `plex.xransum.com` verified accessible over HTTPS externally (401 response = auth wall, cert valid).
 - All serverhub systemd services stopped and disabled (plexmediaserver, sonarr, radarr, prowlarr, tautulli, rdt-client, rdt-blocklist, overseerr, byparr).
 - Serverhub powered off.
+- Fixed Overseerr `settings.json`: updated Radarr/Sonarr hostnames from `localhost` to Docker service names, root folders from serverhub RAID paths to NAS NFS paths, externalUrls to public subdomains, and Tautulli hostname from `mediaserver.kevin-haas.com` to Docker service name `tautulli`. Overseerr restarted and Radarr/Sonarr connections verified responding.
 
 **Decision shift — media deletion deferred:**
 Step 6 (delete media from serverhub RAID) was explicitly skipped at user request. Media files on `/mnt/raid0/media/` remain intact. This is a separate job. Game server dirs (`/home/minecraft/`, `/home/steam/`) were never touched per spec.
+
+**Root cause of Overseerr "Loading..." bug:**
+`settings.json` retained serverhub-era config (`hostname: localhost`, RAID paths). Once serverhub was powered off, Overseerr's Radarr/Sonarr API calls failed and the request dialog dropdowns hung at "Loading...". Fixed by pointing at Docker service names on the internal network.

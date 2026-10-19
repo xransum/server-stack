@@ -9,7 +9,7 @@ Format: newest entry at the top.
 
 ---
 
-## 2026-10-19 — serverhub decommissioned (Worker 2)
+## 2026-10-19 — serverhub decommissioned + Overseerr fixed (Worker 2)
 
 **Context:** Ran Worker 2 decommission job. media-vm confirmed as sole production server.
 
@@ -18,8 +18,12 @@ Format: newest entry at the top.
 - Confirmed NAS media sizes match serverhub RAID exactly (2.2T movies, 5.7T TV).
 - User confirmed router port forwards switched: 32400 TCP and 443 TCP → 192.168.1.169 (media-vm).
 - Verified plex.xransum.com responds over HTTPS (401 auth required = healthy).
-- Stopped and disabled all serverhub systemd services (plexmediaserver, sonarr, radarr, prowlarr, tautulli, rdt-client, rdt-blocklist, overseerr, byparr).
-- Powered off serverhub (192.168.1.166).
+- All serverhub systemd services stopped and disabled (plexmediaserver, sonarr, radarr, prowlarr, tautulli, rdt-client, rdt-blocklist, overseerr, byparr).
+- Serverhub powered off.
+- Fixed Overseerr `settings.json`: Radarr/Sonarr hostnames updated from `localhost` to Docker service names (`radarr`, `sonarr`), root folders updated from serverhub RAID paths to NAS paths (`/mnt/media/movies`, `/mnt/media/tv`), externalUrls updated to `radarr.xransum.com`/`sonarr.xransum.com`, Tautulli hostname updated from `mediaserver.kevin-haas.com` to `tautulli`. Container restarted and connections verified.
+
+**Root cause of Overseerr "Loading..." bug:**
+Overseerr's `settings.json` still had serverhub-era config (`hostname: localhost`, old RAID paths). When serverhub was powered off, Overseerr couldn't reach Radarr/Sonarr and the request dialog dropdowns timed out showing "Loading...". Fixed by pointing at Docker service names on the internal `server-stack_default` network.
 
 **Deferred:**
 - Media file deletion from serverhub RAID (`/mnt/raid0/media/`) — explicitly deferred to a separate worker job. All data intact on serverhub; NAS is source of truth.
