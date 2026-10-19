@@ -76,9 +76,10 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 | Worker | Status | Notes |
 |---|---|---|
 | Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox |
-| Worker 2 — Decommission | ⏳ pending | Independent, anytime |
+| Worker 2 — Decommission | ⚠️ scope updated | Overseerr issue needs fixing first |
 | Worker 3 — Game Servers | ⏳ pending | Independent, anytime |
 | Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
+| Worker 5 — Portainer | ⏳ pending | Independent, anytime |
 
 ---
 

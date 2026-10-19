@@ -17,9 +17,10 @@ Each worker is a self-contained session that does one job and nothing else.
 | Worker | Job | Status | Trigger |
 |---|---|---|---|
 | [Worker 1](worker-1-gpu.md) | PCIe passthrough + NVIDIA drivers + Plex NVENC | ⏳ pending | RTX 2070 physically in Proxmox machine |
-| [Worker 2](worker-2-decommission.md) | Decommission serverhub | ⏳ pending | Anytime (independent) |
+| [Worker 2](worker-2-decommission.md) | Decommission serverhub | ⚠️ scope updated | Anytime (independent) |
 | [Worker 3](worker-3-gameservers.md) | Create gameservers-vm + Pelican Panel | ⏳ pending | Anytime (independent) |
 | [Worker 4](worker-4-devboxes.md) | Create devbox-template VM | ⏳ pending | Anytime (independent) |
+| [Worker 5](worker-5-portainer.md) | Portainer CE Docker management UI | ⏳ pending | Anytime (independent) |
 
 ## Parent session
 
