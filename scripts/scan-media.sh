@@ -1,45 +1,53 @@
 #!/bin/bash
 
 # /usr/local/bin/scan-media.sh
-# ClamAV scan script called by Radarr/Sonarr on import.
-# Deletes infected files and optionally sends Discord notifications.
+# Mounted into Radarr and Sonarr containers as a Custom Script (On Import trigger).
+# POSTs file path + metadata to the scan-media sidecar container which runs
+# ClamAV, deletes infected files, blocklists the release, and notifies Discord.
+#
+# Native systemd (legacy): this script used to call clamscan directly.
+# Docker: delegates all logic to scan-media:8080/scan over HTTP.
+#
+# Environment variables injected by Radarr on import:
+#   radarr_eventtype, radarr_moviefile_path, radarr_download_id, radarr_movie_id
+#
+# Environment variables injected by Sonarr on import:
+#   sonarr_eventtype, sonarr_episodefile_path, sonarr_download_id, sonarr_series_id
 
-file="$1"
+SCAN_MEDIA_URL="http://scan-media:8080/scan"
 
-if [ -z "$file" ] || [ ! -e "$file" ]; then
+# Determine which service triggered this and extract the relevant vars
+if [ -n "$radarr_moviefile_path" ]; then
+    FILE="$radarr_moviefile_path"
+    DOWNLOAD_ID="${radarr_download_id:-}"
+    SERVICE="radarr"
+    MEDIA_ID="${radarr_movie_id:-}"
+elif [ -n "$sonarr_episodefile_path" ]; then
+    FILE="$sonarr_episodefile_path"
+    DOWNLOAD_ID="${sonarr_download_id:-}"
+    SERVICE="sonarr"
+    MEDIA_ID="${sonarr_series_id:-}"
+else
+    # Not an import event (e.g. test notification) — nothing to do
     exit 0
 fi
 
-# Load Discord webhook URL if config exists
-DISCORD_WEBHOOK_URL=""
-if [ -f /etc/scan-media.conf ]; then
-    # shellcheck source=/dev/null
-    source /etc/scan-media.conf
+if [ -z "$FILE" ] || [ ! -e "$FILE" ]; then
+    exit 0
 fi
 
-# Send a Discord notification if a webhook URL is configured
-notify_discord() {
-    local message="$1"
-    if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-        return
-    fi
-    curl -s -o /dev/null \
-        -H "Content-Type: application/json" \
-        -d "{\"content\": \"$message\"}" \
-        "$DISCORD_WEBHOOK_URL"
-}
+# POST to scan-media container and capture HTTP response code
+PAYLOAD="{\"path\":\"${FILE}\",\"download_id\":\"${DOWNLOAD_ID}\",\"service\":\"${SERVICE}\",\"media_id\":\"${MEDIA_ID}\"}"
 
-# Extract a short display name from the full path for notifications
-display_name="$(basename "$(dirname "$file")")/$(basename "$file")"
+HTTP_CODE=$(wget -qO- \
+    --server-response \
+    --post-data="$PAYLOAD" \
+    --header="Content-Type: application/json" \
+    "$SCAN_MEDIA_URL" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}')
 
-clamscan --no-summary --quiet "$file"
-status=$?
-
-if [ "$status" -eq 1 ]; then
-    logger -t clamav "INFECTED FILE DETECTED: $file"
-    rm -f "$file"
-    notify_discord ":biohazard: Malicious file detected and nuked:\n- $display_name"
-elif [ "$status" -gt 1 ]; then
-    logger -t clamav "ClamAV scan failed for $file with exit code $status"
-    notify_discord ":warning: ClamAV scan error (exit $status) for:\n- $display_name"
+# If scan-media returned 5xx (infected), exit non-zero so Radarr/Sonarr mark it failed
+if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" -ge 500 ] 2>/dev/null; then
+    exit 1
 fi
+
+exit 0

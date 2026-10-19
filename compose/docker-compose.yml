@@ -126,8 +126,12 @@ services:
       # IMPORTANT: tv and downloads must be on the same NFS server for hardlinks.
       - /mnt/media/tv:/mnt/media/tv
       - /mnt/media/downloads:/mnt/media/downloads
+      # ClamAV scan script — called by Sonarr on import via Custom Script connection
+      - ../scripts/scan-media.sh:/usr/local/bin/scan-media.sh:ro
     ports:
       - "8989:8989"
+    depends_on:
+      - scan-media
 
   radarr:
     <<: *restart-policy
@@ -141,8 +145,12 @@ services:
       # IMPORTANT: movies and downloads must be on the same NFS server for hardlinks.
       - /mnt/media/movies:/mnt/media/movies
       - /mnt/media/downloads:/mnt/media/downloads
+      # ClamAV scan script — called by Radarr on import via Custom Script connection
+      - ../scripts/scan-media.sh:/usr/local/bin/scan-media.sh:ro
     ports:
       - "7878:7878"
+    depends_on:
+      - scan-media
 
   prowlarr:
     <<: *restart-policy
@@ -205,6 +213,27 @@ services:
       - rdt-client
       - sonarr
       - radarr
+
+  scan-media:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/scan-media/Dockerfile
+    image: server-stack/scan-media:local
+    profiles: [indexers]
+    container_name: scan-media
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      RADARR_URL: http://radarr:7878
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY: ${SONARR_API_KEY}
+    volumes:
+      # Needs write access to delete infected files from both libraries
+      - /mnt/media/movies:/mnt/media/movies
+      - /mnt/media/tv:/mnt/media/tv
+      # Persist ClamAV virus definitions — avoids re-downloading ~300MB on every restart
+      - clamav-db:/var/lib/clamav
 
   # ---------------------------------------------------------------------------
   # CLOUDFLARE-BYPASS profile
@@ -368,3 +397,5 @@ volumes:
   rdt-client-config:
   nginx-pm-data:
   nginx-pm-letsencrypt:
+  # ClamAV virus definition database — persisted to avoid re-downloading on restart
+  clamav-db:
