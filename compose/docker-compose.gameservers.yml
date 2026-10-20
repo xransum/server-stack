@@ -1,8 +1,11 @@
 # Docker Compose -- gameservers-vm stack (Pelican Panel only)
 #
 # Target: gameservers-vm on Proxmox compute server (separate VM from media-vm).
+# Deployed and operational as of 2026-10-19.
 #
 # This stack runs independently of docker-compose.yml (different VM).
+# Deploy: ssh gameservers-vm, cd /opt/gameservers/server-stack/compose
+#         docker compose -f docker-compose.gameservers.yml up -d
 #
 # Pelican has two parts:
 #   - Panel: the web UI + API -- runs here in Docker (image: ghcr.io/pelican/panel)

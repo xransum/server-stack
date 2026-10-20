@@ -187,6 +187,67 @@ Commit any config changes. Update `docs/session-log.md`.
 
 ---
 
+## Operational Notes (read before touching anything)
+
+### Wings config auto-update gotcha — IMPORTANT
+Wings has `ignore_panel_config_updates: true` set in `/etc/pelican/config.yml`.
+This was necessary because Wings auto-overwrites its own config from the Panel
+node settings on restart, which wiped out the correct port/SSL settings and
+broke the stack.
+
+**Consequence:** if you change node settings in the Panel UI (port, SSL mode,
+FQDN, etc.), those changes will NOT take effect automatically. You must:
+1. Manually edit `/etc/pelican/config.yml` on gameservers-vm to match
+2. `sudo systemctl restart wings`
+
+Do NOT set `ignore_panel_config_updates: false` — Wings will overwrite the
+config with whatever the Panel says and break itself (SSL cert path will be
+empty, causing Wings to fail to start).
+
+### Wings WebSocket routing
+Browser WebSocket connects via: Browser → CF Tunnel → NPM (media-vm:443) → Wings (gameservers-vm:8080)
+
+Direct LAN DNS (grey-cloud A record pointing to a private IP) does NOT work
+in modern Chrome/Firefox — browsers block it via Private Network Access
+protection. The CF Tunnel is required for the Panel console WebSocket.
+
+NPM proxy host for gameservers-vm.xransum.com:
+- Forward: http://192.168.1.170:8080
+- SSL: Let's Encrypt cert (auto-renews via NPM)
+- WebSocket upgrade: enabled
+- SSL forced: DISABLED (tunnel terminates SSL, NPM proxies plain HTTP to Wings)
+
+### Starting a server for the first time
+All modpack servers use `./server_start.sh` as the startup command. On first
+boot the script detects that `libraries/` is missing and runs the NeoForge/Forge
+installer automatically. This takes 2-5 minutes and looks like it's hanging —
+it's not. Watch the console output.
+
+### Running multiple servers simultaneously
+All servers default to allocation mc1:25565. To run two simultaneously:
+1. In Pelican → server settings → change its Primary Allocation to one of
+   the unused ports (25568-25571 for the additional servers)
+2. Make sure the corresponding port forward exists on the router
+
+### NAS backups
+NAS backup target is mounted at /mnt/gameservers on gameservers-vm.
+Live game data stays on local disk (/var/lib/pelican/volumes/).
+Set up per-server backup schedules in Pelican UI when each server goes live.
+NAS path: media/gameservers dataset (NOT dev/gameservers — that pool doesn't exist).
+
+### Server UUIDs (Wings data dirs under /var/lib/pelican/volumes/)
+| Server | UUID prefix |
+|---|---|
+| ATM10 v7.1 | 83c95aef |
+| ATM10 v4.5 | a4595ff6 |
+| ATM9 v0.3.2 | 5f275f4a |
+| ATM9 Sky v1.1.1 | 39d94756 |
+| BMC4 v30.5 | 1b557ac4 |
+| DH + Iris v0.4.2 | 1ca0348a |
+| Sky Factory 4 v4.2.4 | 276e9e1c |
+
+---
+
 ## Out of Scope
 
 - Do NOT touch media-vm Docker services
