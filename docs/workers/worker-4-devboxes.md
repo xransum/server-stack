@@ -270,5 +270,56 @@ Commit any config changes. Update `docs/session-log.md` with what was done.
 1. `sudo tailscale up` — auth with your account
 2. `gh auth login` — re-auth gh CLI (token not copied, only config)
 3. Add SSH config entry on Windows: `Host devbox-N → HostName <tailscale-ip>`
+   (User and IdentityFile are inherited from the `devbox-*` wildcard block)
 4. Optionally: `aws configure` to add credentials
 5. Renew GitHub Copilot auth if needed (`vim`, `:Copilot auth`)
+6. Set hostname: `sudo hostnamectl set-hostname devbox-N && sudo sed -i "s/127.0.1.1.*/127.0.1.1\tdevbox-N/" /etc/hosts`
+
+### Cloning a new devbox
+
+```bash
+# On Proxmox (pick next available VMID)
+ssh proxmox "qm clone 102 <vmid> --name devbox-N --full 1 && qm start <vmid>"
+
+# Wait for boot, get IP from Proxmox console or:
+ssh proxmox "qm guest cmd <vmid> network-get-interfaces"
+```
+
+### Gotchas discovered during setup
+
+- **Proxmox: snapshots and templates are mutually exclusive.** `qm template`
+  fails if the VM has snapshots. Delete snapshots first, then convert.
+
+- **Proxmox: template must be shut down.** `qm template` fails on a running VM.
+  Shut down first: `qm shutdown <vmid> && qm template <vmid>`.
+
+- **Proxmox: detach ISO after install.** The installer ISO stays attached after
+  Ubuntu install. Detach it: `qm set <vmid> --ide2 none,media=cdrom`.
+
+- **Windows has no sshpass.** To bootstrap SSH key auth from Windows using only
+  a password, use Python/paramiko: `pip install paramiko` then connect with
+  `client.connect(host, username=user, password=pass)` and inject the pubkey.
+
+- **mise Python attestation verification fails for some versions.** mise 2026.x
+  enforces GitHub artifact attestations for Python prebuilts; older versions
+  (3.8.x, 3.11.x, 3.12.x) don't have attestations. Fix:
+  `mise settings set python.github_attestations false` then retry.
+
+- **pyenv not on PATH in non-login SSH shells.** `command -v pyenv` returns
+  nothing if pyenv isn't in the default PATH. Source `~/.bashrc` or check
+  `~/.pyenv/bin/pyenv` directly when inventorying a remote box.
+
+- **opencode official install script returns 404.** Install via npm instead:
+  `npm install -g opencode-ai`. Version: 1.19.3.
+
+- **Windows Terminal clipboard (OSC52).** Git Bash does not support OSC52
+  clipboard passthrough over SSH. Use Windows Terminal instead. Enable OSC52
+  in `settings.json` under `profiles.defaults`:
+  ```json
+  "allowedClipboardProgramTypes": ["text"],
+  "clipboardWriteProtection": "never"
+  ```
+
+- **Tailscale IP per clone, not per template.** The template's Tailscale IP
+  belongs to the template instance. Each clone gets its own Tailscale IP after
+  `tailscale up`. Do not reuse or hard-code the template's Tailscale IP.

@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-19 (Worker 3 complete)
+Last updated: 2026-10-19 (Worker 4 complete)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -15,6 +15,7 @@ Paste this file into the parent session to re-sync without rediscovery.
 | proxmox | 192.168.1.168 | 100.77.224.51 | `ssh proxmox` or `ssh proxmox-ts` |
 | truenas | 192.168.1.164 | 100.67.119.85 | `ssh truenas` or `ssh truenas-ts` |
 | serverhub | 192.168.1.166 | none | `ssh serverhub` (being decommissioned) |
+| devbox-template | 192.168.1.171 (DHCP, not fixed) | 100.79.150.3 | `ssh devbox-template` or `ssh devbox-template-ts` |
 
 SSH key: `~/.ssh/homelab` (ed25519) — deployed to all hosts.
 Passwords in `~/.env` on Windows: `SSH_PASSWORD`, `CF_DDNS_TOKEN`.
@@ -120,7 +121,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox (after serverhub powered off) |
 | Worker 2 — Decommission | ✅ completed | Serverhub powered off, all services fixed |
 | Worker 3 — Game Servers | ✅ completed | gameservers-vm live, Pelican+Wings deployed, 7 MC servers migrated |
-| Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
+| Worker 4 — Devboxes | ✅ completed | devbox-template (VM 102) live as Proxmox template, Tailscale up |
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ⏳ pending | Independent, anytime |
 
