@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-19
+Last updated: 2026-10-19 (Worker 3 complete)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -11,6 +11,7 @@ Paste this file into the parent session to re-sync without rediscovery.
 | Host | IP (LAN) | IP (Tailscale) | SSH alias |
 |---|---|---|---|
 | media-vm | 192.168.1.169 | 100.107.1.14 | `ssh media-vm` or `ssh media-vm-ts` |
+| gameservers-vm | 192.168.1.170 | 100.117.244.86 | `ssh gameservers-vm` or `ssh gameservers-vm-ts` |
 | proxmox | 192.168.1.168 | 100.77.224.51 | `ssh proxmox` or `ssh proxmox-ts` |
 | truenas | 192.168.1.164 | 100.67.119.85 | `ssh truenas` or `ssh truenas-ts` |
 | serverhub | 192.168.1.166 | none | `ssh serverhub` (being decommissioned) |
@@ -54,15 +55,52 @@ Known issues (cosmetic, not blocking):
 ### CF Tunnel (orange cloud) → NPM → container
 overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 
+### CF Tunnel (orange cloud) → NPM → backend
+overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas,
+pelican (→ Pelican Panel on gameservers-vm:80),
+gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
+
 ### Grey cloud (direct A record, DDNS-managed by cloudflare-ddns on media-vm)
 - plex.xransum.com → home IP 96.231.19.234 → router → media-vm:443 (NPM+SSL) + 32400 (direct)
 - docker.xransum.com → 100.107.1.14 (Tailscale IP, static — NOT managed by cloudflare-ddns)
-- mc1, mc2, valheim, satisfactory, factorio → home IP (port forwards NOT YET set up — pending gameservers-vm)
+- mc1, mc2, mc3, valheim, satisfactory, factorio → home IP (port forwards set up ✅)
+
+### SRV records (Minecraft — players connect without specifying port)
+- `_minecraft._tcp.mc1.xransum.com` → port 25565 (ATM10 v7.1)
+- `_minecraft._tcp.mc2.xransum.com` → port 25566 (ATM10 v4.5)
+- `_minecraft._tcp.mc3.xransum.com` → port 25567 (ATM9)
+
+### Port forwards (router → gameservers-vm 192.168.1.170)
+25565, 25566, 25567, 25568, 25569, 25570, 25571 TCP
 
 ### SSL
 - All CF tunnel services: valid Let's Encrypt cert via Cloudflare (auto-managed)
 - plex.xransum.com: Let's Encrypt cert via NPM DNS challenge (expires 2027-01-17)
 - docker.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare (expires 2027-01-17)
+- gameservers-vm.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare (expires 2027-01-17)
+
+---
+
+## gameservers-vm (192.168.1.170)
+
+- Proxmox VM 101: Ubuntu 24.04, 12 vCPU, 32GB RAM, 512GB NVMe
+- Pelican Panel: https://pelican.xransum.com (Docker, SQLite)
+- Wings: native systemd binary, HTTP on :8080, proxied via NPM on media-vm
+- NAS backup mount: nas:/mnt/media/gameservers → /mnt/gameservers
+- Wings config: `ignore_panel_config_updates: true` — if Panel node settings change,
+  manually edit /etc/pelican/config.yml and restart Wings
+
+### Game servers (all in /var/lib/pelican/volumes/)
+
+| Server | Port | UUID prefix | Status |
+|---|---|---|---|
+| ATM10 v7.1 (NeoForge 21.1.234) | 25565 | 83c95aef | ✅ confirmed working |
+| ATM10 v4.5 (NeoForge 21.1.191) | 25566 | a4595ff6 | migrated, not started |
+| ATM9 v0.3.2 (Forge 1.20.1) | 25567 | 5f275f4a | migrated, not started |
+| ATM9 Sky v1.1.1 (Forge 1.20.1) | 25568 | 39d94756 | migrated, not started |
+| BMC4 v30.5 (Forge 1.20.1) | 25569 | 1b557ac4 | migrated, not started |
+| DH + Iris v0.4.2 (Fabric) | 25570 | 1ca0348a | migrated, not started |
+| Sky Factory 4 v4.2.4 (Forge 1.12.2) | 25571 | 276e9e1c | migrated, not started |
 
 ---
 
@@ -81,7 +119,7 @@ overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
 |---|---|---|
 | Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox (after serverhub powered off) |
 | Worker 2 — Decommission | ✅ completed | Serverhub powered off, all services fixed |
-| Worker 3 — Game Servers | ⏳ pending | Independent, anytime |
+| Worker 3 — Game Servers | ✅ completed | gameservers-vm live, Pelican+Wings deployed, 7 MC servers migrated |
 | Worker 4 — Devboxes | ⏳ pending | Independent, anytime |
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ⏳ pending | Independent, anytime |
