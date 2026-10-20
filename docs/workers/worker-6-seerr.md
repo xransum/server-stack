@@ -1,7 +1,7 @@
 # Worker 6 — Seerr Migration (Overseerr replacement)
 
 ## Status
-⏳ pending
+✅ completed
 
 ## Trigger
 Independent — can be started anytime. Overseerr is still functional but deprecated.
@@ -155,4 +155,34 @@ ssh media-vm "cd /opt/media/server-stack && git pull"
 
 ## Completion Notes
 
-(fill in when done)
+**Completed: 2026-10-20**
+
+### What was done
+
+1. **Backup** — Took a tarball of the `server-stack_overseerr-config` Docker volume to `/tmp/overseerr-backup.tar.gz` on media-vm (1.2 MB) before touching anything.
+2. **Stopped Overseerr** — `docker compose --profile media stop overseerr`.
+3. **Fixed permissions** — Used a temporary alpine container to `chown -R 1000:1000` the config volume data dir. Required because Seerr runs as the `node` user (UID 1000), not root like the linuxserver image.
+4. **Updated `compose/docker-compose.yml`**:
+   - Image changed from `lscr.io/linuxserver/overseerr:latest` → `ghcr.io/seerr-team/seerr:latest`
+   - Added `init: true` (required by Seerr — no init process included in image)
+   - Removed `environment: <<: *puid-pgid` block (Seerr does not use PUID/PGID/TZ linuxserver vars)
+   - Volume mount changed from `overseerr-config:/config` → `overseerr-config:/app/config` (Seerr's config path)
+5. **Committed and pushed** compose change (`c51db57`).
+6. **Pulled on media-vm** — branches had diverged (12 local vs 20 remote commits); did `git reset --hard origin/main` to align with GitHub as source of truth.
+7. **Started Seerr** — pulled `ghcr.io/seerr-team/seerr:latest` and started container. Seerr logged automatic migration success on first boot: `"Yeah! Overseerr to Seerr migration completed successfully!"` along with 8 settings migrations applied.
+8. **Verified** — API at `http://localhost:5055/api/v1/settings/public` returned `"initialized": true` and `"applicationTitle": "Seerr"`. Container running as `ghcr.io/seerr-team/seerr:latest`.
+
+### Decisions that shifted vs worker doc
+
+| Item | Worker doc | Actual |
+|---|---|---|
+| Image | `seerr/seerr:latest` | `ghcr.io/seerr-team/seerr:latest` (official registry per migration guide) |
+| `init: true` | not mentioned | added — required by official Seerr Docker spec |
+| Volume mount path | `/config` | `/app/config` (Seerr's path; linuxserver used `/config`) |
+| Permissions step | not mentioned | required before start — node user (UID 1000) must own config dir |
+| Config migration | manual steps per guide | fully automatic on first Seerr start |
+| `git pull` on media-vm | simple pull | needed `git reset --hard origin/main` due to diverged branches (12 local commits not on remote) |
+
+### No API keys or secrets were touched
+
+The live `settings.json` (Overseerr API key, Tautulli API key, all notification webhooks) was preserved exactly as-is through the volume. No credentials were inspected, modified, or committed.
