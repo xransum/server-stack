@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-19 (Worker 4 complete)
+Last updated: 2026-10-20 (Worker 6 complete)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -29,7 +29,7 @@ Profiles active: `media`, `indexers`, `proxy`, `cloudflare-bypass`
 | Container | Status | Notes |
 |---|---|---|
 | plex | ✅ | Libraries loaded, software transcode only (no GPU yet) |
-| overseerr | ✅ | Fixed: Docker service names, correct paths |
+| overseerr | ✅ | Migrated to Seerr 3.5.0 (ghcr.io/seerr-team/seerr:latest), auto-migration ran on first boot |
 | tautulli | ✅ | |
 | calibre-web | ✅ | Books imported, inotify watcher active |
 | sonarr | ✅ | Root: /mnt/media/tv |
@@ -123,7 +123,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 3 — Game Servers | ✅ completed | gameservers-vm live, Pelican+Wings deployed, 7 MC servers migrated |
 | Worker 4 — Devboxes | ✅ completed | devbox-template (VM 102) live as Proxmox template, Tailscale up |
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
-| Worker 6 — Seerr Migration | ⏳ pending | Independent, anytime |
+| Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
 
 ---
 
