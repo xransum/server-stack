@@ -9,6 +9,36 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-20 — Worker 6: Overseerr → Seerr migration
+
+**Context:** Overseerr deprecated upstream; migrated to Seerr (the official successor) on media-vm. Service continued operating at `https://overseerr.xransum.com` — no DNS, NPM, or CF tunnel changes needed.
+
+**Done:**
+
+- Config volume backed up to `/tmp/overseerr-backup.tar.gz` (1.2 MB) before any changes.
+- Permissions on the config volume fixed to UID/GID 1000 (`node` user) — required because Seerr dropped the linuxserver wrapper and runs as a non-root user.
+- `compose/docker-compose.yml` updated:
+  - Image: `lscr.io/linuxserver/overseerr:latest` → `ghcr.io/seerr-team/seerr:latest`
+  - Added `init: true` (Seerr image has no init process)
+  - Removed `PUID`/`PGID`/`TZ` environment block (not used by Seerr)
+  - Volume mount: `overseerr-config:/config` → `overseerr-config:/app/config`
+- Seerr pulled and started; auto-migration ran on first boot and logged success.
+- API confirmed: `initialized: true`, `applicationTitle: "Seerr"`.
+- User confirmed UI loads and data is intact at `https://overseerr.xransum.com`.
+
+**Decisions shifted vs worker doc:**
+
+- Correct image is `ghcr.io/seerr-team/seerr:latest` (not `seerr/seerr:latest` — that tag doesn't exist on Docker Hub; Seerr ships only via GHCR).
+- `init: true` is required (not mentioned in worker doc).
+- Volume mount path is `/app/config` (not `/config` as linuxserver used).
+- Permissions chown step required before starting — omitted from worker doc.
+- Config migration was fully automatic; no manual file moves needed.
+- `git pull` on media-vm needed `git reset --hard origin/main` due to 12 diverged local commits not present on remote.
+
+**Worker 6 status: ✅ completed.**
+
+---
+
 ## 2026-10-19 — Worker 4: devbox-template (VM 102)
 
 ### What was done
