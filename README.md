@@ -13,7 +13,7 @@ graph TB
     end
 
     subgraph Router [Home Router — 96.231.19.234]
-        PF[Port Forwards<br/>443 → media-vm<br/>32400 → media-vm<br/>25565-25571 → gameservers-vm<br/>2456-2457 UDP → gameservers-vm<br/>7777 UDP → gameservers-vm<br/>34197 UDP → gameservers-vm]
+        PF["Port Forwards<br/>443 + 32400 → media-vm<br/>25565-25571 → gameservers-vm<br/>2456-2457 UDP → gameservers-vm<br/>7777 UDP → gameservers-vm<br/>34197 UDP → gameservers-vm"]
     end
 
     subgraph Proxmox [Proxmox — 192.168.1.168]
@@ -31,7 +31,7 @@ graph TB
             QCLEANER[queue-cleaner]
             RDTBLOCK[rdt-blocklist]
             SCANMEDIA[scan-media / ClamAV]
-            BYPARR[Byparr + Proxies<br/>:8192 / :8881+]
+            BYPARR["Byparr + Proxies<br/>:8192 / :8881+"]
             CLOUDFLARED[cloudflared tunnel]
             CFDDNS[cloudflare-ddns]
         end
@@ -54,8 +54,8 @@ graph TB
 
     subgraph TrueNAS [TrueNAS — 192.168.1.164]
         NFS[NFS Exports]
-        MEDIA_STORE[/mnt/media<br/>movies / tv / books]
-        GAME_STORE[/mnt/dev/gameservers<br/>backups]
+        MEDIA_STORE["/mnt/media<br/>movies, tv, books"]
+        GAME_STORE["/mnt/dev/gameservers<br/>backups"]
         S3[MinIO S3]
     end
 
@@ -119,7 +119,7 @@ graph TB
     WINGS --> FACTORIO
 
     %% Tailscale-only
-    PORTAINER -.->|Tailscale only<br/>docker.xransum.com| USER
+    PORTAINER -.->|"Tailscale only<br/>docker.xransum.com"| USER
 ```
 
 ## Deployment targets
