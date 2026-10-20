@@ -9,6 +9,29 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-19 — Worker 4: devbox-template (VM 102)
+
+### What was done
+
+Created `devbox-template` (VM 102) on Proxmox as a golden snapshot template
+for on-demand developer VMs. Full dev environment replicated from `debian-devbox`.
+
+**Key decisions:**
+- Replaced pyenv + nvm + rvm with `mise` (single version manager). `rustup` kept
+  separately. See `docs/workers/worker-4-devboxes.md` for full rationale.
+- Python global pinned to 3.11.9 (all 7 pyenv versions from debian-devbox replicated).
+- DHCP not static — stable addressing via Tailscale per clone after `tailscale up`.
+- Proxmox snapshot + convert to template are mutually exclusive; snapshot deleted,
+  template itself is the golden state.
+- opencode installed via `npm install -g opencode-ai` (official install.sh returned 404).
+- 64GB disk (upgraded from 32GB spec for Python builds + Docker headroom).
+- Dotfiles copied from debian-devbox; opencode config from `xransum/opencode-config` repo.
+
+**Post-clone checklist:** `tailscale up`, `gh auth login`, add SSH config entry,
+optionally `aws configure`. See Completion Notes in worker doc for full detail.
+
+---
+
 ## 2026-10-19 — Worker 3: gameservers-vm + Pelican Panel + Wings
 
 ### What was done
