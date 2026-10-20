@@ -1,7 +1,126 @@
 # server-stack
 
-Self-hosted server stack for a Debian 12 media server (`serverhub`).
-Covers media automation, Cloudflare bypass, and network utilities.
+Self-hosted homelab stack running on Proxmox with two VMs backed by TrueNAS NAS over NFS.
+
+## Infrastructure Overview
+
+```mermaid
+graph TB
+    subgraph Internet
+        CF[Cloudflare DNS<br/>xransum.com]
+        RD[Real-Debrid]
+        USER[User / Browser]
+    end
+
+    subgraph Router [Home Router — 96.231.19.234]
+        PF[Port Forwards<br/>443 → media-vm<br/>32400 → media-vm<br/>25565-25571 → gameservers-vm<br/>2456-2457 UDP → gameservers-vm<br/>7777 UDP → gameservers-vm<br/>34197 UDP → gameservers-vm]
+    end
+
+    subgraph Proxmox [Proxmox — 192.168.1.168]
+        subgraph media-vm [media-vm — 192.168.1.169]
+            NPM[Nginx Proxy Manager<br/>:443 / :80 / :81]
+            PLEX[Plex<br/>:32400]
+            OVERSEERR[Overseerr<br/>:5055]
+            SONARR[Sonarr<br/>:8989]
+            RADARR[Radarr<br/>:7878]
+            PROWLARR[Prowlarr<br/>:9696]
+            RDT[RDT-Client<br/>:6500]
+            TAUTULLI[Tautulli<br/>:8181]
+            CALIBRE[Calibre-Web<br/>:8083]
+            PORTAINER[Portainer<br/>:9443]
+            QCLEANER[queue-cleaner]
+            RDTBLOCK[rdt-blocklist]
+            SCANMEDIA[scan-media / ClamAV]
+            BYPARR[Byparr + Proxies<br/>:8192 / :8881+]
+            CLOUDFLARED[cloudflared tunnel]
+            CFDDNS[cloudflare-ddns]
+        end
+
+        subgraph gameservers-vm [gameservers-vm — 192.168.1.170]
+            PELICAN[Pelican Panel<br/>:80]
+            WINGS[Wings<br/>:8080]
+            MC1[ATM10 v7.1<br/>:25565]
+            MC2[ATM10 v4.5<br/>:25566]
+            MC3[Other MC Servers<br/>:25567-25571]
+            VALHEIM[Valheim<br/>:2456-2457]
+            SATISFACTORY[Satisfactory<br/>:7777]
+            FACTORIO[Factorio<br/>:34197]
+        end
+
+        subgraph devbox-vm [devbox-vm — 192.168.1.x]
+            DEVBOX[devbox-template<br/>Ubuntu 24.04]
+        end
+    end
+
+    subgraph TrueNAS [TrueNAS — 192.168.1.164]
+        NFS[NFS Exports]
+        MEDIA_STORE[/mnt/media<br/>movies / tv / books]
+        GAME_STORE[/mnt/dev/gameservers<br/>backups]
+        S3[MinIO S3]
+    end
+
+    %% DNS routing
+    CF -->|orange cloud CF tunnel| CLOUDFLARED
+    CF -->|grey cloud A → home IP| PF
+    CLOUDFLARED -->|tunnel ingress| NPM
+
+    %% Public access
+    USER --> CF
+    PF -->|:443 + :32400| media-vm
+    PF -->|game ports| gameservers-vm
+
+    %% NPM reverse proxy
+    NPM --> PLEX
+    NPM --> OVERSEERR
+    NPM --> SONARR
+    NPM --> RADARR
+    NPM --> PROWLARR
+    NPM --> RDT
+    NPM --> TAUTULLI
+    NPM --> CALIBRE
+    NPM --> PELICAN
+
+    %% Media pipeline
+    OVERSEERR --> SONARR
+    OVERSEERR --> RADARR
+    SONARR --> PROWLARR
+    RADARR --> PROWLARR
+    PROWLARR --> BYPARR
+    PROWLARR --> RDT
+    RDT --> RD
+    RD -->|direct download link| RDT
+    RDT --> SCANMEDIA
+    SCANMEDIA --> SONARR
+    SCANMEDIA --> RADARR
+    SONARR --> PLEX
+    RADARR --> PLEX
+    TAUTULLI --> PLEX
+
+    %% Sidecars
+    QCLEANER --> RDT
+    QCLEANER --> SONARR
+    QCLEANER --> RADARR
+    RDTBLOCK --> RDT
+    CFDDNS -->|update grey-cloud A records| CF
+
+    %% NFS storage
+    NFS --> MEDIA_STORE
+    NFS --> GAME_STORE
+    MEDIA_STORE -->|NFS mount /mnt/media| media-vm
+    GAME_STORE -->|NFS mount /mnt/gameservers| gameservers-vm
+
+    %% Pelican game servers
+    PELICAN --> WINGS
+    WINGS --> MC1
+    WINGS --> MC2
+    WINGS --> MC3
+    WINGS --> VALHEIM
+    WINGS --> SATISFACTORY
+    WINGS --> FACTORIO
+
+    %% Tailscale-only
+    PORTAINER -.->|Tailscale only<br/>docker.xransum.com| USER
+```
 
 ## Deployment targets
 
