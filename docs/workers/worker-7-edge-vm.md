@@ -191,6 +191,45 @@ All 11 services verified HTTP 200/401 after cutover.
 
 ---
 
+## Portainer Agent
+
+`portainer/agent` added to `docker-compose.edge.yml` (port 9001) so edge-vm's
+containers are visible in the single Portainer UI on media-vm — no second Portainer
+instance needed.
+
+Registered via Portainer REST API from media-vm:
+
+```bash
+# Get token
+TOKEN=$(curl -sk -X POST https://192.168.1.169:9443/api/auth \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<get from ~/.env PORTAINER_PASSWORD>"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['jwt'])")
+
+# Add environment
+curl -sk -X POST "https://192.168.1.169:9443/api/endpoints" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "Name=edge-vm" \
+  -F "EndpointCreationType=2" \
+  -F "URL=tcp://192.168.1.173:9001" \
+  -F "GroupID=1" \
+  -F "TLS=true" \
+  -F "TLSSkipVerify=true" \
+  -F "TLSSkipClientVerify=true"
+```
+
+Result: Portainer environment ID 6, name `edge-vm`, status healthy.
+
+**Gotcha — agent TLS cert is scoped to container IP:** Portainer verifies the agent's
+TLS cert, but the cert is only valid for the container's internal IP (e.g. `172.18.0.5`),
+not the host LAN IP. Must use `TLSSkipVerify=true` + `TLSSkipClientVerify=true`.
+Without these, Portainer returns "Unable to get environment type" with an x509 cert error.
+
+**Gotcha — URL needs `tcp://` scheme:** Portainer rejects bare `host:port` with
+"Unable to parse docker host". Must prefix with `tcp://`.
+
+---
+
 ## State After
 
 | VM | Role |

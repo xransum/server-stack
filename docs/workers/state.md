@@ -34,6 +34,7 @@ Deployed at: `/opt/edge/server-stack/compose/`
 | nginx-proxy-manager | ✅ | All proxy hosts configured, DNS-01 certs for all hostnames |
 | cloudflared | ✅ | Tunnel `8cd27584-...` connected, 4 connectors |
 | cloudflare-ddns | ✅ | Updates every 5min, covers plex + game server subdomains |
+| portainer-agent | ✅ | Port 9001, registered in Portainer on media-vm as environment "edge-vm" (ID 6) |
 
 ---
 
