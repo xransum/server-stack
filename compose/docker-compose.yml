@@ -170,6 +170,9 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest
     profiles: [indexers]
     container_name: prowlarr
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       <<: *puid-pgid
     volumes:
