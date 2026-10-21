@@ -1,5 +1,10 @@
 # rdt-client
 
+> **Note:** The native-install paths below (e.g. `/mnt/raid0/media/Downloads`)
+> reflect the decommissioned `serverhub` setup. In the current Docker deployment
+> on media-vm, downloads land at `/mnt/media/downloads` (NFS from TrueNAS) and
+> the database is in the `rdt-client-config` Docker named volume. See `compose/docker-compose.yml`.
+
 Real-Debrid download client. rdt-client acts as a qBittorrent-compatible API that Radarr and Sonarr can use as a download client. It sends torrents to Real-Debrid for debridding and then downloads the resulting files locally.
 
 - **Port**: 6500

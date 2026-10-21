@@ -18,14 +18,15 @@ Cursor, Aider, etc.) working in this repo. Read it before making any changes.
 
 ## Project purpose
 
-Native systemd service stack for a self-hosted Debian 12 media server
-(`serverhub`, 192.168.1.166). The long-term migration target is a Proxmox
-homelab with two VMs backed by a TrueNAS NAS over NFS: `media-vm` runs the
-media stack via Docker Compose, and `gameservers-vm` runs game servers under
-Pelican (Panel + Wings). See `docs/proxmox-compute.md` and `docs/migration.md`
-for that plan.
+Docker Compose stack for a self-hosted Proxmox homelab backed by a TrueNAS NAS
+over NFS. Three active VMs: `edge-vm` handles ingress (NPM + cloudflared +
+cloudflare-ddns), `media-vm` runs the media stack (Plex, Sonarr, Radarr, etc.),
+and `gameservers-vm` runs game servers under Pelican (Panel + Wings). See
+`docs/proxmox-compute.md` for VM layout and `docs/workers/state.md` for current
+operational state.
 
-Both deployment targets must be kept in sync at all times.
+The native systemd target (`serverhub`, Debian 12) is **fully decommissioned**
+as of 2026-10-21. `services/` unit files are kept as historical reference only.
 
 ---
 
@@ -37,8 +38,9 @@ docker/               Dockerfile per custom service (one dir per service)
   <service>/
     Dockerfile
     example.env
-compose/              Docker Compose stack (lab target, untested until migration)
+compose/              Docker Compose stack (active production)
   docker-compose.yml
+  docker-compose.edge.yml
   docker-compose.gameservers.yml
   .env.example
   README.md
@@ -139,14 +141,12 @@ with the date, context, and outcome.
 
 ## Deployment targets
 
-### Native systemd (legacy — `serverhub`, being decommissioned)
+### Native systemd (fully decommissioned — `serverhub`)
 
-Services ran as systemd units on Debian 12. All services have been stopped.
-Serverhub will be decommissioned once GPU is moved to Proxmox and port
-forwards are switched. See `docs/workers/worker-2-decommission.md`.
-
-- Server: `serverhub` (192.168.1.166), SSH alias configured
-- Repo clone on server: `~/Documents/Gits/server-stack`
+Services ran as systemd units on Debian 12. serverhub was physically
+decommissioned 2026-10-21 — drives pulled, GPU moved to Proxmox.
+`services/` unit files are kept as historical reference only.
+See `docs/workers/worker-2-decommission.md`.
 
 ### Docker Compose (active production — `edge-vm` + `media-vm` on Proxmox)
 
@@ -174,8 +174,8 @@ pattern for anything non-trivial:
 # Write payload to local temp file
 # scp it to server
 # ssh-execute on server
-scp .\local_script.sh serverhub:/tmp/script.sh
-ssh serverhub "bash /tmp/script.sh"
+scp .\local_script.sh media-vm:/tmp/script.sh
+ssh media-vm "bash /tmp/script.sh"
 ```
 
 For sudo without interactive prompts:

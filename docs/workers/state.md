@@ -112,7 +112,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
 - Proxmox VM 101: Ubuntu 24.04, 12 vCPU, 32GB RAM, 512GB NVMe
 - Pelican Panel: https://pelican.xransum.com (Docker, SQLite)
-- Wings: native systemd binary, HTTP on :8080, proxied via NPM on media-vm
+- Wings: native systemd binary, HTTP on :8080, proxied via NPM on edge-vm
 - NAS backup mount: nas:/mnt/media/gameservers → /mnt/gameservers
 - Wings config: `ignore_panel_config_updates: true` — if Panel node settings change,
   manually edit /etc/pelican/config.yml and restart Wings

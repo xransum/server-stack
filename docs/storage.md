@@ -84,12 +84,15 @@ and TrueNAS doesn't manage it natively.
 
 ### Pool definitions
 
-| Pool | Purpose | Starting drives | Topology | Usable (start) | Max usable (24-bay NAS) |
+| Pool | Purpose | Starting drives | Topology | Usable (current) | Max usable (24-bay NAS) |
 |---|---|---|---|---|---|
-| `media` | All media + downloads | 2× 12TB | Mirror vdevs | 12TB | ~96TB (8 mirror pairs) |
+| `media` | All media + downloads + game backups | 2× 10TB + 2× 9.1TB (added 2026-10-21) | 2× Mirror vdevs (mixed capacity) | ~20TB | ~160TB (8 mirror pairs) |
 | `s3` | S3/object storage backing | 2× 12TB | Mirror vdevs | 12TB | Expand as needed |
-| `dev` | Devbox VM disks + snapshots | 2× 2TB | Mirror | 2TB | Fixed (2 drives) |
-| `boot` | TrueNAS OS | 1–2× SSD (32GB+) | Mirror recommended | — | — |
+| `boot` | TrueNAS OS | 1× 223.6GB SSD | Single | — | — |
+
+> **Note:** A `dev` pool was planned but never created. Devbox VM disks live on Proxmox's
+> local LVM-thin pool (`data`), not on TrueNAS. Game server backups land under `media/gameservers/`
+> (not a separate `dev/gameservers/` dataset).
 
 > **MinIO deployment note:** The `s3` pool backs a native MinIO TrueNAS Scale
 > app at `/mnt/s3/store`. MinIO is not part of the `media-vm` Docker Compose
@@ -114,23 +117,20 @@ export, snapshot policy, and quota enforcement in TrueNAS.
 
 ```
 media/
-  downloads/
-    complete/         ← download clients drop completed files here
-    incomplete/       ← in-progress download temp space
+  downloads/          ← rdt-client download target
   movies/             ← Radarr root folder
   tv/                 ← Sonarr root folder
   music/
   audiobooks/
-  books/
+  books/              ← Calibre-Web library
+  gameservers/        ← Pelican game-server backup target (not live worlds)
 
 s3/
   store/              ← MinIO backing store dataset
-
-dev/
-  backups/            ← long-term VM snapshots exported from Proxmox
-  vmdisks/            ← active devbox VM disk images (iSCSI or NFS)
-  gameservers/        ← Pelican game-server backup target (not live worlds)
 ```
+
+> **Note:** A `dev/` dataset tree was planned but never created. Game server
+> backups land at `media/gameservers/`, not `dev/gameservers/`.
 
 ### The hardlink requirement — critical for *arr
 
@@ -146,14 +146,19 @@ usage until the original is deleted.
 on separate pools or separate NFS mounts.
 
 The layout above puts everything under `media/` for this reason. TrueNAS
-exports `/mnt/media` as a **single NFS share**, mounted at the same path
-inside both the media-vm and any container that needs it:
+exports **six separate NFS shares** (one per subdirectory), all mounted on
+media-vm:
 
 ```
-NAS exports:  /mnt/media  (entire media pool)
-media-vm:     /mnt/media  (NFS mount, same path)
-containers:   /mnt/media  (bind mount from VM, same path)
+NAS exports:  /mnt/media/movies, /mnt/media/tv, /mnt/media/music,
+              /mnt/media/audiobooks, /mnt/media/books, /mnt/media/downloads
+media-vm:     each mounted at the matching /mnt/media/<subdir> path
 ```
+
+> **Why separate exports instead of one root?** TrueNAS was configured with
+> per-directory exports for finer-grained access control. The hardlink
+> requirement is still satisfied because all mounts originate from the same
+> NFS server and ZFS pool.
 
 Sonarr and Radarr are configured with:
 - Root folder: `/mnt/media/tv/` and `/mnt/media/movies/`
@@ -166,13 +171,17 @@ are instant with no extra disk usage.
 
 ## NFS export configuration (TrueNAS)
 
-Three NFS shares exported from TrueNAS:
+NFS shares exported from TrueNAS (actual configuration):
 
 | Share | Dataset | Client | Options |
 |---|---|---|---|
-| `/mnt/media` | `media` | media-vm IP | `rw, sync, no_subtree_check` |
-| `/mnt/s3` | `s3/store` | media-vm IP | `rw, sync, no_subtree_check` |
-| `/mnt/dev` | `dev` | Proxmox host IP | `rw, sync, no_subtree_check` |
+| `/mnt/media/movies` | `media/movies` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/tv` | `media/tv` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/music` | `media/music` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/audiobooks` | `media/audiobooks` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/books` | `media/books` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/downloads` | `media/downloads` | media-vm IP | `rw, hard, intr, _netdev, noatime` |
+| `/mnt/media/gameservers` | `media/gameservers` | gameservers-vm IP | `rw, hard, intr, _netdev, noatime` |
 
 Restrict exports to the specific VM/host IPs (not `*`) so the NAS is not
 accidentally accessible to any device on the LAN.

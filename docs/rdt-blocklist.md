@@ -163,7 +163,7 @@ and restart.
 
 ### Database locked / permission denied
 
-The database is owned by the `media` user on serverhub. The service runs as
+The database is owned by the user running the Docker stack on media-vm. The service runs as
 `media` so this should not occur on a correct install. If you see it:
 
 ```bash

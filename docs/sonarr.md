@@ -1,5 +1,10 @@
 # Sonarr
 
+> **Note:** The native-install paths below (e.g. `/mnt/raid0/media/`, `/opt/Sonarr`)
+> reflect the decommissioned `serverhub` setup. In the current Docker deployment on
+> media-vm, Sonarr runs as a container with config in a named Docker volume and
+> media at `/mnt/media/tv` (NFS mount from TrueNAS). See `compose/docker-compose.yml`.
+
 TV show management and automation. Sonarr monitors for new episodes, searches indexers via Prowlarr, sends torrents to rdt-client, and imports completed downloads into your media library.
 
 - **Port**: 8989

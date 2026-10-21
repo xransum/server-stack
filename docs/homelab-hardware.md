@@ -35,10 +35,11 @@ prices and links where available.
 
 | Drive | Size | Health | Role |
 |---|---|---|---|
-| Seagate IronWolf ST10000VN000 x2 | 10TB each | Clean, healthy, RAID1 on serverhub | Initial mirror VDEV |
-| Seagate Barracuda ST3000DM001 | 3TB | FAILING — 32 uncorrectable errors, Load_Cycle_Count maxed | Retire immediately, do not migrate |
-| HGST Travelstar HTS541010A9E680 | 1TB | 21,127 hours, 27 ICRC errors | Retire |
-| SanDisk SDSSDH3512G | 512GB | Clean, healthy | Spare after serverhub decommission |
+| Seagate IronWolf ST10000VN000 x2 (WP025G10, WP0268FG) | 10TB each | Clean, healthy | Active — mirror-0 in TrueNAS `media` pool |
+| Seagate ST10000VN000 x2 (ex-serverhub, added 2026-10-21) | 9.1TB each | Clean, healthy | Active — mirror-1 in TrueNAS `media` pool (pool now 20TB total) |
+| Seagate Barracuda ST3000DM001 (Z5001EVV) | 3TB | 32 uncorrectable errors, 1.2M load cycles | Retired — wiped and discarded 2026-10-21 |
+| HGST HTS541010A9E680 (JA100CC032UGHM) | 1TB | 22,844 hours | Retired — wiped and discarded 2026-10-21 |
+| SanDisk SDSSDH3512G (173668421501) | 512GB | Clean, healthy | On retainer — not installed |
 
 ### NAS build notes
 
@@ -70,12 +71,12 @@ All parts ordered Oct 2026 via Amazon. PSU sourced from spare Seasonic GX-850W
 | Seasonic Focus GX-850W ATX 3.1 | 1 | $0.00 | Spare unit from NAS order — not purchased separately |
 | 10Gtek X550-AT2 10GbE NIC | 1 | $93.99 | Same NIC as NAS — still needed, not in Amazon order |
 
-### Free from serverhub (pull after decommission)
+### Pulled from serverhub (decommissioned 2026-10-21)
 
-| Part | Notes |
-|---|---|
-| NVIDIA RTX 2070 | PCIe passthrough to media-vm for Plex NVENC transcoding |
-| SanDisk SDSSDH3512G 512GB SSD | Spare/extra storage |
+| Part | Status | Notes |
+|---|---|---|
+| NVIDIA RTX 2070 | ✅ Installed in Proxmox | PCIe passthrough to media-vm, NVENC active in Plex |
+| SanDisk SDSSDH3512G 512GB SSD | On retainer | Not installed — spare |
 
 ---
 

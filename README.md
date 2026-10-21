@@ -13,14 +13,19 @@ graph TB
     end
 
     subgraph Router [Home Router — 96.231.19.234]
-        PF["Port Forwards<br/>443 + 32400 → media-vm<br/>25565-25571 → gameservers-vm<br/>2456-2457 UDP → gameservers-vm<br/>7777 UDP → gameservers-vm<br/>34197 UDP → gameservers-vm"]
+        PF["Port Forwards<br/>443 → edge-vm<br/>32400 → media-vm<br/>25565-25571 → gameservers-vm<br/>2456-2457 UDP → gameservers-vm<br/>7777 UDP → gameservers-vm<br/>34197 UDP → gameservers-vm"]
     end
 
     subgraph Proxmox [Proxmox — 192.168.1.168]
-        subgraph media-vm [media-vm — 192.168.1.169]
+        subgraph edge-vm [edge-vm — 192.168.1.173]
             NPM[Nginx Proxy Manager<br/>:443 / :80 / :81]
+            CLOUDFLARED[cloudflared tunnel]
+            CFDDNS[cloudflare-ddns]
+        end
+
+        subgraph media-vm [media-vm — 192.168.1.169]
             PLEX[Plex<br/>:32400]
-            OVERSEERR[Overseerr<br/>:5055]
+            SEERR[Seerr<br/>:5055]
             SONARR[Sonarr<br/>:8989]
             RADARR[Radarr<br/>:7878]
             PROWLARR[Prowlarr<br/>:9696]
@@ -32,8 +37,6 @@ graph TB
             RDTBLOCK[rdt-blocklist]
             SCANMEDIA[scan-media / ClamAV]
             BYPARR["Byparr + Proxies<br/>:8192 / :8881+"]
-            CLOUDFLARED[cloudflared tunnel]
-            CFDDNS[cloudflare-ddns]
         end
 
         subgraph gameservers-vm [gameservers-vm — 192.168.1.170]
@@ -55,7 +58,7 @@ graph TB
     subgraph TrueNAS [TrueNAS — 192.168.1.164]
         NFS[NFS Exports]
         MEDIA_STORE["/mnt/media<br/>movies, tv, books"]
-        GAME_STORE["/mnt/dev/gameservers<br/>backups"]
+        GAME_STORE["/mnt/media/gameservers<br/>backups"]
         S3[MinIO S3]
     end
 
@@ -66,12 +69,13 @@ graph TB
 
     %% Public access
     USER --> CF
-    PF -->|:443 + :32400| media-vm
+    PF -->|:443| edge-vm
+    PF -->|:32400| media-vm
     PF -->|game ports| gameservers-vm
 
     %% NPM reverse proxy
     NPM --> PLEX
-    NPM --> OVERSEERR
+    NPM --> SEERR
     NPM --> SONARR
     NPM --> RADARR
     NPM --> PROWLARR
@@ -79,10 +83,11 @@ graph TB
     NPM --> TAUTULLI
     NPM --> CALIBRE
     NPM --> PELICAN
+    NPM --> PORTAINER
 
     %% Media pipeline
-    OVERSEERR --> SONARR
-    OVERSEERR --> RADARR
+    SEERR --> SONARR
+    SEERR --> RADARR
     SONARR --> PROWLARR
     RADARR --> PROWLARR
     PROWLARR --> BYPARR
@@ -118,26 +123,29 @@ graph TB
     WINGS --> SATISFACTORY
     WINGS --> FACTORIO
 
-    %% Tailscale-only
+    %% Tailscale-only (via edge-vm NPM → Tailscale IP)
     PORTAINER -.->|"Tailscale only<br/>docker.xransum.com"| USER
+    NPM -.->|"Tailscale only<br/>proxmox.xransum.com"| Proxmox
+    NPM -.->|"Tailscale only<br/>nas.xransum.com"| TrueNAS
 ```
 
 ## Deployment targets
 
 | Target | Status | Notes |
 |---|---|---|
-| Native systemd (`serverhub`, Debian 12) | **Current production** | All `services/*.service` units, scripts in `/opt/`, env files in `/etc/` |
-| Docker Compose (`media-vm` on Proxmox) | **Lab target — untested** | `compose/docker-compose.yml`, awaiting Proxmox homelab hardware |
+| Docker Compose — `media-vm` (app stack) | **Active production** | `compose/docker-compose.yml` — Plex, Sonarr, Radarr, Prowlarr, Seerr, Tautulli, Calibre-Web, RDT, Byparr, Portainer |
+| Docker Compose — `edge-vm` (ingress) | **Active production** | `compose/docker-compose.edge.yml` — Nginx Proxy Manager, cloudflared, cloudflare-ddns |
+| Docker Compose — `gameservers-vm` | **Active production** | `compose/docker-compose.gameservers.yml` — Pelican Panel + Wings |
+| Native systemd (`serverhub`, Debian 12) | **Decommissioned** | Historical reference only. `services/*.service` units kept for documentation. serverhub was physically decommissioned 2026-10-21. |
 
-The Docker Compose stack mirrors the native systemd stack service-for-service.
-See `compose/README.md` for Docker startup instructions and
-`docs/migration.md` for the full cutover plan from native → Docker.
+See `compose/README.md` for Docker startup instructions.
+See `docs/migration.md` for the historical cutover runbook (migration complete as of 2026-10-19).
 
-Architecture and hardware planning docs:
+Architecture and hardware docs:
 - `docs/storage.md` — TrueNAS NAS, ZFS pool layout, expansion guide
 - `docs/proxmox-compute.md` — Proxmox VM layout, GPU passthrough, devbox workflow
-- `docs/homelab-hardware.md` — hardware BOM and shopping list
-- `docs/migration.md` — step-by-step cutover runbook
+- `docs/homelab-hardware.md` — hardware BOM
+- `docs/migration.md` — historical cutover runbook (completed)
 
 ## Media
 
@@ -155,17 +163,16 @@ Architecture and hardware planning docs:
 | queue-cleaner | Sidecar for stuck rdt-client 500 queue items | - | [Install & Config](docs/queue-cleaner.md) |
 | ClamAV | Malware scanning | - | [Install & Config](docs/clamav.md) |
 
-Plex, Overseerr, and Tautulli are assumed to already be installed and are not
-managed by this stack.
+Plex, Seerr (formerly Overseerr), Tautulli, and Calibre-Web are all managed by this stack via the `media` profile in `compose/docker-compose.yml`.
 
 ### How it works
 
 ```
-Overseerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local download -> Plex
+Seerr -> Radarr/Sonarr -> Prowlarr -> rdt-client -> Real-Debrid -> local download -> Plex
 ```
 
-1. A user requests content in Overseerr
-2. Overseerr sends the request to Radarr (movies) or Sonarr (TV)
+1. A user requests content in Seerr
+2. Seerr sends the request to Radarr (movies) or Sonarr (TV)
 3. Radarr/Sonarr asks Prowlarr to search configured indexers for a matching torrent
 4. The torrent is sent to rdt-client which pushes it to Real-Debrid
 5. Real-Debrid debrids the torrent and serves a direct download link
@@ -187,9 +194,8 @@ items. See [queue-cleaner docs](docs/queue-cleaner.md) for the full rationale.
 
 ### Requirements
 
-- Debian 12 (Bookworm)
+- Ubuntu 24.04 LTS (media-vm and edge-vm)
 - An active Real-Debrid premium subscription
-- Plex, Overseerr, and Tautulli already installed and running
 - sudo access
 
 ### Installation
@@ -209,45 +215,31 @@ This stack is installed manually. Follow the docs in order:
 11. [byparr-proxy](docs/byparr-proxy.md) - install one instance per Turnstile-protected indexer (1337x, apibay, etc.); shipped definitions cover both
 12. [ClamAV](docs/clamav.md) - install malware scanning (optional)
 
-### File structure
+### File structure (Docker — current production)
 
+NFS mounts on media-vm (from TrueNAS 192.168.1.164):
 ```
-/mnt/raid/media/
-    Videos/
-        Movies/         <- Radarr root folder
-        TV Shows/       <- Sonarr root folder
-    Downloads/
-        radarr/         <- Radarr category download folder
-        sonarr/         <- Sonarr category download folder
-        rdtclient.db    <- rdt-client database
-        rdtclient.log   <- rdt-client logs
-
-/opt/
-    Radarr/             <- Radarr binaries
-    Sonarr/             <- Sonarr binaries
-    Prowlarr/           <- Prowlarr binaries
-    rdt-client/         <- rdt-client binaries
-    decluttarr/         <- Decluttarr source and venv
-        config/
-            config.yaml <- Decluttarr config
-    queue-cleaner/
-        queue-cleaner.py <- queue-cleaner script
-    byparr/             <- Byparr source (cloned repo, deps in pyenv venv)
-    byparr-unwrap/
-        byparr-unwrap.py <- byparr-unwrap sidecar script
-    byparr-proxy/
-        byparr-proxy.py  <- byparr-proxy HTTP passthrough script
-
-/etc/
-    queue-cleaner.env   <- queue-cleaner API keys and settings (root:root 600)
-    byparr-proxy/
-        <instance>.env  <- one env file per byparr-proxy instance (e.g. 1337x.env)
-
-/var/lib/
-    radarr/             <- Radarr config and database
-    sonarr/             <- Sonarr config and database
-    prowlarr/           <- Prowlarr config and database
+/mnt/media/
+    movies/         <- Radarr root folder
+    tv/             <- Sonarr root folder
+    music/
+    audiobooks/
+    books/          <- Calibre-Web library
+    downloads/
+        radarr/     <- Radarr category download folder
+        sonarr/     <- Sonarr category download folder
 ```
+
+Docker named volumes on media-vm (in `/var/lib/docker/volumes/server-stack_*/`):
+```
+plex-config, tautulli-config, overseerr-config, calibre-config,
+sonarr-config, radarr-config, prowlarr-config, rdt-client-config,
+portainer-data
+```
+
+> **Legacy native-install paths** (`/mnt/raid0/media/`, `/opt/Radarr/`, etc.) were
+> used on the decommissioned serverhub host. They are preserved in per-service docs
+> as historical reference only.
 
 ### Permissions
 
@@ -258,15 +250,17 @@ for full details.
 ### Service management
 
 ```bash
-# Check status
-sudo systemctl status radarr sonarr prowlarr rdt-client decluttarr queue-cleaner.timer byparr 'byparr-proxy@*'
+# Check status (on media-vm)
+docker compose --profile media --profile indexers --profile cloudflare-bypass ps
 
 # Restart a service
-sudo systemctl restart radarr
+docker restart radarr
 
 # View logs
-sudo journalctl -u radarr -n 50
+docker logs radarr -n 50 --follow
 ```
+
+> Native systemd commands (`systemctl`, `journalctl`) applied to the decommissioned serverhub. See `services/` for historical unit files.
 
 ### Known issues
 
@@ -291,4 +285,6 @@ sudo journalctl -u radarr -n 50
 
 | Service | Purpose | Docs |
 | --- | --- | --- |
-| DNS Updater | Dynamic DNS updater for DreamHost via systemd timer | [Install & Config](docs/dns-updater.md) |
+| cloudflare-ddns | Dynamic DNS updater for grey-cloud Cloudflare records (edge-vm) | [Install & Config](docs/dns-updater.md) |
+| cloudflared | Cloudflare Tunnel for public orange-cloud services (edge-vm) | — |
+| Nginx Proxy Manager | Reverse proxy + SSL termination (edge-vm) | — |

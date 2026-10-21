@@ -20,28 +20,37 @@ Docker Compose stack for `media-vm` and `gameservers-vm` on Proxmox.
 
 | Profile | Services |
 |---|---|
-| `media` | Plex, Tautulli, Overseerr, Calibre-Web |
+| `media` | Plex, Tautulli, Seerr (formerly Overseerr), Calibre-Web, Portainer |
 | `indexers` | Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist |
 | `cloudflare-bypass` | Byparr, byparr-unwrap, byparr-proxy-1337x, byparr-proxy-apibay |
-| `proxy` | Nginx Proxy Manager + Cloudflare Tunnel |
 | `s3` | Reserved (MinIO runs natively on TrueNAS — no active services) |
 | `infra` | dns-updater (deprecated — CF Tunnel replaces this) |
 
-### Quick start (full media stack)
+> **Note:** The `proxy` profile (Nginx Proxy Manager, cloudflared, cloudflare-ddns) has been
+> moved to `edge-vm`. See `compose/docker-compose.edge.yml` and deploy it there instead.
+
+### Quick start — media-vm
 
 ```bash
 cd compose/
 cp .env.example .env
-# edit .env — fill in PLEX_CLAIM, CLOUDFLARE_TUNNEL_TOKEN
+# edit .env — fill in PLEX_CLAIM and service API keys
 
-# Proxy first so NPM is ready before services come up
-docker compose --profile proxy up -d
-
-# Then media + indexers
+# Media + indexers
 docker compose --profile media --profile indexers up -d
 
 # Cloudflare bypass indexers (after Prowlarr is configured)
 docker compose --profile cloudflare-bypass up -d
+```
+
+### Quick start — edge-vm (ingress)
+
+```bash
+cd compose/
+cp .env.example .env
+# edit .env — fill in CLOUDFLARE_TUNNEL_TOKEN, CF_DDNS_TOKEN, DOMAINS
+
+docker compose -f docker-compose.edge.yml up -d
 ```
 
 ### Custom Cardigann definitions
@@ -63,11 +72,12 @@ cp definitions/*.yml compose/custom-definitions/
 | Sonarr | http://192.168.1.169:8989 |
 | Radarr | http://192.168.1.169:7878 |
 | Prowlarr | http://192.168.1.169:9696 |
-| Overseerr | http://192.168.1.169:5055 |
+| Seerr (fka Overseerr) | http://192.168.1.169:5055 |
 | Tautulli | http://192.168.1.169:8181 |
 | rdt-client | http://192.168.1.169:6500 |
 | Calibre-Web | http://192.168.1.169:8083 |
-| NPM admin | http://192.168.1.169:81 |
+| Portainer | https://192.168.1.169:9443 |
+| NPM admin (edge-vm) | http://192.168.1.173:81 |
 
 ---
 
@@ -93,8 +103,8 @@ Phase 5.5.
 | `wings` | Node daemon; runs each game server container from its egg |
 
 Live worlds run on the `gameservers-vm` local disk (Wings data dir). Pelican
-pushes scheduled backups to the NAS `dev/gameservers` dataset (mounted at
-`/mnt/gameservers`, backup target only), which also keeps ZFS snapshots.
+pushes scheduled backups to the NAS at `/mnt/media/gameservers` (mounted at
+`/mnt/gameservers` on gameservers-vm, backup target only).
 
 ### Quick start
 

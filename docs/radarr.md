@@ -1,5 +1,10 @@
 # Radarr
 
+> **Note:** The native-install paths below (e.g. `/mnt/raid0/media/`, `/opt/Radarr`)
+> reflect the decommissioned `serverhub` setup. In the current Docker deployment on
+> media-vm, Radarr runs as a container with config in a named Docker volume and
+> media at `/mnt/media/movies` (NFS mount from TrueNAS). See `compose/docker-compose.yml`.
+
 Movie management and automation. Radarr monitors for new movies, searches indexers via Prowlarr, sends torrents to rdt-client, and imports completed downloads into your media library.
 
 - **Port**: 7878

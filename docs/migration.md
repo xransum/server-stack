@@ -1,13 +1,21 @@
 # Migration Runbook
 
+> **MIGRATION COMPLETE — 2026-10-19**
+> This document is a historical runbook. The migration from native systemd
+> on `serverhub` to Docker Compose on Proxmox is done. `serverhub` was
+> physically decommissioned 2026-10-21 (drives pulled, GPU moved to Proxmox).
+> For current operational state see `docs/workers/state.md`.
+
+---
+
 Step-by-step cutover from native systemd on `serverhub` to the Docker
 Compose stack on Proxmox. Each phase is independently checkable. Do not
 skip ahead — later phases depend on earlier ones being verified.
 
-**Current state:** everything runs as native systemd on `serverhub`
-(192.168.1.166, Debian 12). Target: NAS + Proxmox compute, with the media
-stack running in `media-vm` via Docker Compose and game servers running in
-`gameservers-vm` under Pelican (Panel + Wings). See `docs/proxmox-compute.md`.
+**Historical state at migration start:** everything ran as native systemd on
+`serverhub` (192.168.1.166, Debian 12). Target: NAS + Proxmox compute, with
+the media stack running in `media-vm` via Docker Compose and game servers
+running in `gameservers-vm` under Pelican (Panel + Wings).
 
 ---
 

@@ -1,5 +1,10 @@
 # Permissions
 
+> **Note:** This document describes the native-install permissions setup used on the
+> decommissioned `serverhub`. In the current Docker deployment on media-vm, services
+> run as container users (PUID/PGID 1000) and NFS mounts are owned by UID 950 on TrueNAS.
+> The `media` system user and directory structure below are not used in production.
+
 All services run as a single shared `media` user. This eliminates cross-service
 permission issues that arise from running each service as its own user.
 

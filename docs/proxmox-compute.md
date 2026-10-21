@@ -91,7 +91,7 @@ Status legend: **active** = migrate it; **deprecated** = do not migrate, retire;
 |---|---|---|
 | Plex | active | media server; GPU/NVENC consumer |
 | Tautulli | active | Plex analytics + watch history |
-| Overseerr | active | request UI (friends/family facing) |
+| Seerr (formerly Overseerr) | active | request UI (friends/family facing) |
 
 **Indexers / Download** (media-vm)
 
@@ -114,13 +114,13 @@ Status legend: **active** = migrate it; **deprecated** = do not migrate, retire;
 | byparr-proxy-1337x | deprecated | 1337x solve fails upstream; retire |
 | FlareSolverr | deprecated | replaced by Byparr |
 
-**Proxy / Access** (media-vm)
+**Proxy / Access** (edge-vm — 192.168.1.173)
 
 | Service | Status | Notes |
 |---|---|---|
-| Nginx Proxy Manager | active | reverse proxy + SSL |
+| Nginx Proxy Manager | active | reverse proxy + SSL termination for all services |
 | cloudflared | active | Cloudflare Tunnel for public subdomains |
-| dns-updater | deprecated | superseded once CF Tunnel is live; retire |
+| cloudflare-ddns | active | keeps grey-cloud records updated when home IP changes |
 
 **Game servers** (gameservers-vm, Pelican-managed, on-demand). Target roster
 for the new build below; see Phase 5.5 in `docs/migration.md` for migrating
@@ -330,25 +330,25 @@ visible to players — this is acceptable for a private server among friends.
 
 | Subdomain | DNS type | Port | Forward to |
 |---|---|---|---|
-| `mc.xransum.com` | A, grey cloud | 25565 | Minecraft LXC/container IP |
-| `mc2.xransum.com` | A, grey cloud | 25566 | Second Minecraft instance |
-| `rust.xransum.com` | A, grey cloud | 28015 | Rust server container |
+| `mc1.xransum.com` | A, grey cloud | 25565 | gameservers-vm |
+| `mc2.xransum.com` | A, grey cloud | 25566 | gameservers-vm |
+| `mc3.xransum.com` | A, grey cloud | 25567 | gameservers-vm |
+| `valheim.xransum.com` | A, grey cloud | 2456-2457 | gameservers-vm |
+| `satisfactory.xransum.com` | A, grey cloud | 7777 | gameservers-vm |
+| `factorio.xransum.com` | A, grey cloud | 34197 | gameservers-vm |
 
-FIOS gateway port forward rules (add when a game server is active):
+FIOS gateway port forward rules (active):
 
 | External port | Internal IP | Internal port | Protocol |
 |---|---|---|---|
-| 25565 | gameservers-vm-ip | 25565 | TCP |
-| 25566 | gameservers-vm-ip | 25566 | TCP |
-| 28015 | gameservers-vm-ip | 28015 | TCP+UDP |
-| 28016 | gameservers-vm-ip | 28016 | TCP (RCON) |
+| 25565–25571 | 192.168.1.170 | 25565–25571 | TCP |
+| 2456–2457 | 192.168.1.170 | 2456–2457 | UDP |
+| 7777 | 192.168.1.170 | 7777 | UDP |
+| 34197 | 192.168.1.170 | 34197 | UDP |
 
-Grey cloud records contain your real home IP and must be kept updated when
-the IP rotates. On `serverhub` this was handled by the `dns-updater` service
-via the Cloudflare API, but that service is **deprecated** and will not be
-migrated (see Service inventory) -- handle IP updates via the router's built-in
-dynamic DNS or Cloudflare's own tooling instead. Only grey cloud records need
-updating -- orange cloud (proxied) subdomains are unaffected by IP changes.
+Grey cloud records contain your real home IP and are kept updated automatically
+by the `cloudflare-ddns` container running on edge-vm. Only grey cloud records
+need updating — orange cloud (proxied) subdomains are unaffected by IP changes.
 
 Minecraft players connect using the subdomain directly. The standard
 Minecraft SRV record approach works but is not required since the default
@@ -381,24 +381,19 @@ For the NAS: TrueNAS Scale → Apps → Available Applications → Tailscale.
 
 ## Cloudflare Tunnel (public subdomains)
 
-Install `cloudflared` as a Docker container in media-vm. Creates an outbound
-tunnel from your network to Cloudflare's edge — no port forwarding, no public
-IP exposure.
+`cloudflared` runs as a Docker container on **edge-vm** (not media-vm). Creates
+an outbound tunnel from your network to Cloudflare's edge — no port forwarding,
+no public IP exposure.
 
-Plex and Overseerr are the only public services. Everything else stays
-Tailscale-only.
+Media services are public via CF Tunnel. Management interfaces (Proxmox, TrueNAS,
+Portainer) are Tailscale-only. See `compose/docker-compose.edge.yml`.
 
-```bash
-# After creating a tunnel in Cloudflare Zero Trust dashboard:
-docker run -d --name cloudflared \
-  cloudflare/cloudflared:latest tunnel --no-autoupdate run \
-  --token <your-tunnel-token>
-```
+In Cloudflare Zero Trust dashboard, public hostnames point at NPM on edge-vm:
 
-In Cloudflare Zero Trust dashboard, add public hostnames that point at Nginx PM:
-
-- `plex.xransum.com` → `http://nginx-proxy-manager:80`
-- `overseerr.xransum.com` → `http://nginx-proxy-manager:80`
+- `overseerr.xransum.com` → `http://192.168.1.169:5055` (via NPM)
+- `sonarr.xransum.com` → `http://192.168.1.169:8989` (via NPM)
+- `radarr.xransum.com` → `http://192.168.1.169:7878` (via NPM)
+- etc.
 
 ---
 
@@ -409,18 +404,25 @@ internal service target. Most services use Docker DNS names. Plex is the
 exception because it runs with `network_mode: host`, so Nginx PM must forward
 to the `media-vm` host IP instead.
 
-| Subdomain | Forward target | Port | Public? |
+All traffic routes: CF Tunnel / grey-cloud A record → edge-vm NPM → internal service.
+NPM is on edge-vm (192.168.1.173). Backends use LAN IPs since edge-vm cannot resolve
+Docker container names on media-vm.
+
+| Subdomain | Backend | Port | Access |
 |---|---|---|---|
-| `plex.xransum.com` | `media-vm-ip` | 32400 | CF Tunnel |
-| `overseerr.xransum.com` | `overseerr` | 5055 | CF Tunnel |
-| `sonarr.xransum.com` | `sonarr` | 8989 | Tailscale only |
-| `radarr.xransum.com` | `radarr` | 7878 | Tailscale only |
-| `prowlarr.xransum.com` | `prowlarr` | 9696 | Tailscale only |
-| `tautulli.xransum.com` | `tautulli` | 8181 | Tailscale only |
-| `rdt.xransum.com` | `rdt-client` | 6500 | Tailscale only |
-| `nas.xransum.com` | `nas-ip` | 80 | Tailscale only |
-| `proxmox.xransum.com` | `proxmox-ip` | 8006 | Tailscale only |
-| `npm.xransum.com` | `nginx-proxy-manager` | 81 | Tailscale only |
+| `plex.xransum.com` | `192.168.1.169` | 32400 | Grey cloud (direct port forward) |
+| `overseerr.xransum.com` | `192.168.1.169` | 5055 | CF Tunnel (Seerr) |
+| `sonarr.xransum.com` | `192.168.1.169` | 8989 | CF Tunnel |
+| `radarr.xransum.com` | `192.168.1.169` | 7878 | CF Tunnel |
+| `prowlarr.xransum.com` | `192.168.1.169` | 9696 | CF Tunnel |
+| `tautulli.xransum.com` | `192.168.1.169` | 8181 | CF Tunnel |
+| `rdt.xransum.com` | `192.168.1.169` | 6500 | CF Tunnel |
+| `calibre.xransum.com` | `192.168.1.169` | 8083 | CF Tunnel |
+| `pelican.xransum.com` | `192.168.1.170` | 80 | CF Tunnel |
+| `docker.xransum.com` | `192.168.1.169` | 9443 | Tailscale only (edge-vm NPM) |
+| `nas.xransum.com` | `100.67.119.85` | 80 | Tailscale only (edge-vm NPM) |
+| `proxmox.xransum.com` | `100.77.224.51` | 8006 | Tailscale only (edge-vm NPM) |
+| `npm.xransum.com` | `127.0.0.1` | 81 | CF Tunnel (NPM's own UI) |
 
 Cloudflare Tunnel handles SSL termination for public subdomains. Nginx PM
 handles SSL via a Let's Encrypt wildcard cert (Cloudflare DNS-01 challenge)
@@ -433,7 +435,7 @@ for Tailscale-accessible subdomains.
 | Decision | Resolution | Notes |
 |---|---|---|
 | Compute server CPU/RAM | Ryzen 9 7950X3D (AM5) + 64GB G.Skill DDR5-6000 CL36 | Ordered Oct 2026. See `docs/homelab-hardware.md` for the full BOM and prices. |
-| Reverse proxy | Nginx Proxy Manager (Nginx PM) | `jc21/nginx-proxy-manager` in `compose/docker-compose.yml`. |
+| Reverse proxy | Nginx Proxy Manager (Nginx PM) | `jc21/nginx-proxy-manager` in `compose/docker-compose.edge.yml` on edge-vm. |
 | S3 service | MinIO on TrueNAS Scale | Native app backed by `/mnt/s3/store`; not part of the media-vm compose stack. |
 | Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing. |
 | Domain | `xransum.com` | Homelab services live here. `kevin-haas.com` stays on GitHub Pages. |

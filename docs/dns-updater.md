@@ -132,7 +132,7 @@ sudo systemctl stop dns-updater.timer
 ## Docker install
 
 > **Deprecation notice:** dns-updater is superseded by Cloudflare Tunnel
-> (`cloudflared`, `proxy` profile in `compose/docker-compose.yml`) once
+> (`cloudflared`, in `compose/docker-compose.edge.yml` on edge-vm) once
 > the lab stack is live. CF Tunnel requires no DDNS at all — the tunnel
 > is outbound from your network and Cloudflare handles routing. If you
 > are running CF Tunnel, skip this service entirely.
