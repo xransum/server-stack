@@ -1,0 +1,69 @@
+# Docker Compose — edge-vm stack
+#
+# Target: edge-vm on Proxmox (Ubuntu 24.04 + Docker, 192.168.1.173).
+# Status: ACTIVE — deployed on edge-vm (192.168.1.173).
+#
+# Purpose: Dedicated ingress layer. Handles all inbound traffic for
+#          xransum.com — Cloudflare Tunnel, Nginx Proxy Manager (reverse
+#          proxy + SSL), and Cloudflare DDNS. Keeps media-vm application-only.
+#
+# Usage:
+#   docker compose -f docker-compose.edge.yml up -d
+#
+# Backends: All proxy hosts point at LAN IPs (not Docker service names)
+#           since backends run on separate VMs.
+#
+#   media-vm:        192.168.1.169
+#   gameservers-vm:  192.168.1.170
+#   proxmox:         100.77.224.51  (Tailscale)
+#   truenas:         100.67.119.85  (Tailscale)
+#
+# Secrets: /opt/edge/server-stack/compose/.env
+#   CLOUDFLARE_TUNNEL_TOKEN   — same tunnel as was on media-vm
+#   CF_DDNS_TOKEN             — Cloudflare API token for DDNS updates
+#
+# See docs/workers/worker-7-edge-vm.md for full architecture notes.
+
+name: edge-stack
+
+x-restart: &restart-policy
+  restart: unless-stopped
+
+services:
+
+  nginx-proxy-manager:
+    <<: *restart-policy
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"   # NPM admin UI — restrict to Tailscale access only
+    volumes:
+      - nginx-pm-data:/data
+      - nginx-pm-letsencrypt:/etc/letsencrypt
+
+  cloudflared:
+    <<: *restart-policy
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  cloudflare-ddns:
+    <<: *restart-policy
+    image: favonia/cloudflare-ddns:latest
+    container_name: cloudflare-ddns
+    # Keeps grey-cloud DNS records updated when home IP changes.
+    # Add new game server subdomains to DOMAINS as they are created.
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CF_DDNS_TOKEN}
+      DOMAINS: "plex.xransum.com,mc1.xransum.com,mc2.xransum.com,mc3.xransum.com,valheim.xransum.com,satisfactory.xransum.com,factorio.xransum.com"
+      PROXIED: "false"
+      UPDATE_CRON: "@every 5m"
+      IP6_PROVIDER: "none"
+
+volumes:
+  nginx-pm-data:
+  nginx-pm-letsencrypt:
