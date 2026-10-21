@@ -267,6 +267,8 @@ services:
       - /mnt/media/downloads:/mnt/media/downloads
       # Post-process hook: scans via scan-media, moves clean files to books/ready
       - ../scripts/shelfmark-post-process.py:/scripts/post_process.py:ro
+      # Calibre library: read-only so Shelfmark can read metadata.db for dedup
+      - /mnt/media/books:/books:ro
     ports:
       - "8084:8084"
     depends_on:
