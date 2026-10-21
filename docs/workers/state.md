@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-21 (Worker 8 complete — Shelfmark live at shelfmark.xransum.com)
+Last updated: 2026-10-21 (Worker 8 complete — Shelfmark pipeline live, DCC Books 1-8 in Calibre)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -56,7 +56,7 @@ Profiles active: `media`, `indexers`, `cloudflare-bypass`
 | rdt-blocklist | ✅ | DRY_RUN=false, new API keys |
 | scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
-| shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; UI config (Prowlarr/rdt-client) still needed |
+| shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; Real-Debrid native client; calibre-web poller imports from books/ready |
 | portainer | ✅ | docker.xransum.com, Tailscale-only, Let's Encrypt cert via DNS-01 |
 
 Known issues (cosmetic, not blocking):
@@ -152,7 +152,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
 | Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
-| Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; UI config (Prowlarr/rdt-client) still needed |
+| Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; pipeline verified; manual epub drop → books/ready works |
 
 ---
 

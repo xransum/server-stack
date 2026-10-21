@@ -9,6 +9,56 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-21 — Worker 8: Shelfmark ebook pipeline
+
+**Context:** Deploy Shelfmark (on-demand ebook search/grab) on media-vm, expose at
+`shelfmark.xransum.com`, wire into existing scan-media ClamAV sidecar and Calibre-Web
+library.
+
+**Done:**
+
+- **Staging dirs** on TrueNAS: `downloads/books/incoming` (INGEST_DIR) and
+  `downloads/books/ready` (calibre-web import staging). Both 777 so NFS root-squashed
+  processes can delete files after import.
+- **Shelfmark deployed** on media-vm, port 8084, `indexers` profile. Real-Debrid native
+  client (qBittorrent mode silently fails — Shelfmark issues #470/#607).
+- **post-process hook** (`scripts/shelfmark-post-process.py`) — scans via scan-media,
+  moves clean files to `books/ready`. Script must be `chmod +x` (git mode 100755) or
+  Shelfmark refuses to call it.
+- **Calibre-web poller** replaced inotify watcher — inotify unreliable over NFS for
+  cross-container writes. 15s poll loop is simple and reliable. Init script needs `+x`
+  bit in git or s6 silently skips it at container boot.
+- **NFS permissions** — `/import` (books/ready) was 755, preventing root (NFS-squashed
+  to nobody) from deleting source files. Fixed to 777 on TrueNAS.
+- **NPM proxy host** (edge-vm ID 16) + CF Tunnel config v9 + DNS CNAME created manually
+  (token-managed tunnels don't auto-create DNS records).
+- **Pipeline verified** end-to-end: Player of Games grabbed → scanned → moved → imported
+  into Calibre → source deleted. DCC Books 1-8 added manually via TrueNAS file drop.
+- **AudioBookBay custom Cardigann definition** added (`compose/custom-definitions/audiobookbay.yml`)
+  — ebb.la SSL cert mismatch workaround. Audiobooks only, not epubs.
+- **Prowlarr explicit DNS** (1.1.1.1/8.8.8.8) to avoid ISP SSL interception on indexers.
+- **Calibre library mounted read-only** in shelfmark container for metadata.db dedup.
+
+**Gotchas:**
+
+- Ebook torrent coverage is genuinely thin — virtually all indexers with Books categories
+  are CF/DDoS-Guard protected or have sparse content. Direct download sites (Z-Lib,
+  Anna's Archive) are the real source but both have bot protection that blocks server IPs
+  or requires manual CAPTCHA. z-lib.id works from media-vm; z-lib.gd IP-blocks server IPs.
+- Anna's Archive uses DDoS-Guard — no bypasser can solve its manual CAPTCHA. Dead end.
+- Manual epub import workflow: drop files into `books/ready` on TrueNAS, calibre-web
+  poller imports within 15s. Practical for books not findable via automated sources.
+- Docker bind mount inode mismatch: always `git pull` BEFORE `docker compose up` or
+  force-recreate after pull, otherwise container sees old file content.
+
+**Deferred:**
+
+- Better ebook indexer coverage — no good automated solution found during this session.
+  KAT via Byparr is theoretically possible (same pattern as 1337x) but book content
+  on KAT is also thin. Left for a future session if needed.
+
+---
+
 ## 2026-10-21 — Worker 7: edge-vm — dedicated ingress layer
 
 **Context:** media-vm was doing double duty as application host and ingress layer (NPM + cloudflared + cloudflare-ddns). As the homelab grows with more VMs and services, a dedicated edge VM isolates all traffic routing from the application stack. Also enables portless URLs for proxmox.xransum.com and nas.xransum.com.
