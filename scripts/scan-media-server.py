@@ -57,6 +57,12 @@ def notify_discord_infected(source_title: str, service: str, deleted: list[str])
     if not DISCORD_WEBHOOK_URL:
         return
     files_value = "\n".join(f"`{Path(f).name}`" for f in deleted) or "`(unknown)`"
+    action = "Deleted" if service == "shelfmark" else "Deleted + Blocklisted"
+    footer = (
+        "Files deleted from books-incoming. No blocklist (Shelfmark)."
+        if service == "shelfmark"
+        else "This release has been blocklisted and will not be grabbed again."
+    )
     payload = json.dumps({
         "username": "Malware Scanner",
         "embeds": [{
@@ -65,10 +71,10 @@ def notify_discord_infected(source_title: str, service: str, deleted: list[str])
             "fields": [
                 {"name": "Release", "value": source_title, "inline": False},
                 {"name": "Service", "value": service.capitalize(), "inline": True},
-                {"name": "Action", "value": "Deleted + Blocklisted", "inline": True},
+                {"name": "Action", "value": action, "inline": True},
                 {"name": "Files Nuked", "value": f"```{chr(10).join(Path(f).name for f in deleted)}```", "inline": False},
             ],
-            "footer": {"text": "This release has been blocklisted and will not be grabbed again."},
+            "footer": {"text": footer},
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         }],
     }).encode()
@@ -149,6 +155,10 @@ def blocklist_release(service: str, media_id: str, download_id: str, source_titl
             },
             "episodeIds": [],
         }
+    elif service == "shelfmark":
+        # Shelfmark has no blocklist API — post-process script handles failures
+        log.info("Shelfmark service: skipping blocklist (not applicable)")
+        return
     else:
         log.warning("Unknown service '%s', skipping blocklist", service)
         return

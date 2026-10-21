@@ -105,8 +105,10 @@ services:
     volumes:
       - calibre-web-config:/config
       - /mnt/media/books:/books
-      # Auto-import watcher — runs inotifywait inside the container on /books
-      - ./calibre-watch-init.sh:/custom-cont-init.d/99-calibre-watch:ro
+      # books-ready: shelfmark-post-process.py drops clean ebooks here; watcher imports them
+      - /mnt/media/downloads/books-ready:/import
+      # Auto-import watcher — inotifywait on /import, calibredb add per file, then delete
+      - ../docker/calibre-watch/calibre-watch-init.sh:/custom-cont-init.d/99-calibre-watch:ro
     ports:
       - "8083:8083"
 
@@ -240,11 +242,36 @@ services:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY: ${SONARR_API_KEY}
     volumes:
-      # Needs write access to delete infected files from both libraries
+      # Needs write access to delete infected files from all libraries
       - /mnt/media/movies:/mnt/media/movies
       - /mnt/media/tv:/mnt/media/tv
+      # books-incoming: shelfmark hook sends paths here; scan-media must resolve them identically
+      - /mnt/media/downloads/books-incoming:/mnt/media/downloads/books-incoming
       # Persist ClamAV virus definitions — avoids re-downloading ~300MB on every restart
       - clamav-db:/var/lib/clamav
+
+  shelfmark:
+    <<: *restart-policy
+    image: ghcr.io/calibrain/shelfmark-lite:latest
+    profiles: [indexers]
+    container_name: shelfmark
+    environment:
+      <<: *puid-pgid
+      INGEST_DIR: /mnt/media/downloads/books-incoming
+      CUSTOM_SCRIPT: /scripts/post_process.py
+      CUSTOM_SCRIPT_JSON_PAYLOAD: "true"
+    volumes:
+      - shelfmark-config:/config
+      # Downloads mount must match rdt-client's exactly for path resolution
+      - /mnt/media/downloads:/mnt/media/downloads
+      # Post-process hook: scans via scan-media, moves clean files to books-ready
+      - ../scripts/shelfmark-post-process.py:/scripts/post_process.py:ro
+    ports:
+      - "8084:8084"
+    depends_on:
+      - prowlarr
+      - rdt-client
+      - scan-media
 
   # ---------------------------------------------------------------------------
   # CLOUDFLARE-BYPASS profile
@@ -374,3 +401,4 @@ volumes:
   # ClamAV virus definition database — persisted to avoid re-downloading on restart
   clamav-db:
   portainer-data:
+  shelfmark-config:
