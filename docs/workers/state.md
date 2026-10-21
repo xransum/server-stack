@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-21 (proxmox + nas moved to Tailscale-only grey-cloud A records)
+Last updated: 2026-10-21 (Worker 7 complete — edge-vm live, media-vm app-only)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -8,23 +8,38 @@ Paste this file into the parent session to re-sync without rediscovery.
 
 ## Infrastructure (fully operational)
 
-| Host | IP (LAN) | IP (Tailscale) | SSH alias |
-|---|---|---|---|
-| media-vm | 192.168.1.169 | 100.107.1.14 | `ssh media-vm` or `ssh media-vm-ts` |
-| gameservers-vm | 192.168.1.170 | 100.117.244.86 | `ssh gameservers-vm` or `ssh gameservers-vm-ts` |
-| proxmox | 192.168.1.168 | 100.77.224.51 | `ssh proxmox` or `ssh proxmox-ts` |
-| truenas | 192.168.1.164 | 100.67.119.85 | `ssh truenas` or `ssh truenas-ts` |
-| serverhub | 192.168.1.166 | none | `ssh serverhub` (being decommissioned) |
-| devbox-template | 192.168.1.171 (DHCP, not fixed) | 100.79.150.3 | `ssh devbox-template` or `ssh devbox-template-ts` |
+| Host | IP (LAN) | IP (Tailscale) | SSH alias | Proxmox VM ID |
+|---|---|---|---|---|
+| edge-vm | 192.168.1.173 | 100.106.60.22 | `ssh edge-vm` | 102 |
+| media-vm | 192.168.1.169 | 100.107.1.14 | `ssh media-vm` | 100 |
+| gameservers-vm | 192.168.1.170 | 100.117.244.86 | `ssh gameservers-vm` | 101 |
+| devbox-template | — (stopped) | — | — | 103 |
+| devbox-1 | — (stopped) | 100.79.150.3 | `ssh devbox-1` | 104 |
+| proxmox | 192.168.1.168 | 100.77.224.51 | `ssh proxmox` | host |
+| truenas | 192.168.1.164 | 100.67.119.85 | `ssh truenas` | — |
+| serverhub | 192.168.1.166 | none | `ssh serverhub` | — (decommissioned) |
 
 SSH key: `~/.ssh/homelab` (ed25519) — deployed to all hosts.
 Passwords in `~/.env` on Windows: `SSH_PASSWORD`, `CF_DDNS_TOKEN`.
 
 ---
 
+## edge-vm Docker Stack — All Running
+
+Compose file: `compose/docker-compose.edge.yml`
+Deployed at: `/opt/edge/server-stack/compose/`
+
+| Container | Status | Notes |
+|---|---|---|
+| nginx-proxy-manager | ✅ | All proxy hosts configured, DNS-01 certs for all hostnames |
+| cloudflared | ✅ | Tunnel `8cd27584-...` connected, 4 connectors |
+| cloudflare-ddns | ✅ | Updates every 5min, covers plex + game server subdomains |
+
+---
+
 ## media-vm Docker Stack — All Running
 
-Profiles active: `media`, `indexers`, `proxy`, `cloudflare-bypass`
+Profiles active: `media`, `indexers`, `cloudflare-bypass`
 
 | Container | Status | Notes |
 |---|---|---|
@@ -39,9 +54,6 @@ Profiles active: `media`, `indexers`, `proxy`, `cloudflare-bypass`
 | queue-cleaner | ✅ | DRY_RUN=false, new API keys |
 | rdt-blocklist | ✅ | DRY_RUN=false, new API keys |
 | scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
-| nginx-proxy-manager | ✅ | |
-| cloudflared | ✅ | Tunnel connected |
-| cloudflare-ddns | ✅ | Updates every 5min |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
 | portainer | ✅ | docker.xransum.com, Tailscale-only, Let's Encrypt cert via DNS-01 |
 
@@ -62,10 +74,10 @@ pelican (→ Pelican Panel on gameservers-vm:80),
 gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
 ### Grey cloud (direct A record — Tailscale-only or DDNS-managed)
-- plex.xransum.com → home IP 96.231.19.234 → router → media-vm:443 (NPM+SSL) + 32400 (direct)
-- docker.xransum.com → 100.107.1.14 (Tailscale IP, static — NOT managed by cloudflare-ddns)
-- proxmox.xransum.com → 100.77.224.51 (Tailscale IP, static — direct HTTPS to Proxmox UI :8006)
-- nas.xransum.com → 100.67.119.85 (Tailscale IP, static — direct HTTP to TrueNAS UI :80)
+- plex.xransum.com → home IP 96.231.19.234 → router → edge-vm:443 (NPM+SSL) + media-vm:32400 (direct)
+- docker.xransum.com → 100.106.60.22 (edge-vm Tailscale IP → NPM → media-vm:9443)
+- proxmox.xransum.com → 100.106.60.22 (edge-vm Tailscale IP → NPM → proxmox:8006)
+- nas.xransum.com → 100.106.60.22 (edge-vm Tailscale IP → NPM → truenas:80)
 - mc1, mc2, mc3, valheim, satisfactory, factorio → home IP (port forwards set up ✅)
 
 ### SRV records (Minecraft — players connect without specifying port)
@@ -77,10 +89,12 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 25565, 25566, 25567, 25568, 25569, 25570, 25571 TCP
 
 ### SSL
-- All CF tunnel services: valid Let's Encrypt cert via Cloudflare (auto-managed)
-- plex.xransum.com: Let's Encrypt cert via NPM DNS challenge (expires 2027-01-17)
-- docker.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare (expires 2027-01-17)
-- gameservers-vm.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare (expires 2027-01-17)
+- All CF tunnel services: valid Let's Encrypt cert via Cloudflare (auto-managed by NPM on edge-vm)
+- plex.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare on edge-vm (expires 2027-01-17)
+- docker.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare on edge-vm (expires 2027-01-17)
+- gameservers-vm.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare on edge-vm (expires 2027-01-17)
+- proxmox.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare on edge-vm (expires 2027-01-19)
+- nas.xransum.com: Let's Encrypt cert via NPM DNS-01/Cloudflare on edge-vm (expires 2027-01-19)
 
 ---
 
@@ -126,6 +140,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 4 — Devboxes | ✅ completed | devbox-template (VM 102) live as Proxmox template, Tailscale up |
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
+| Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
 
 ---
 
@@ -134,3 +149,4 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 GitHub: `https://github.com/xransum/server-stack`
 Local: `~/Documents/Gits/server-stack` (Windows)
 media-vm: `/opt/media/server-stack`
+edge-vm: `/opt/edge/server-stack`

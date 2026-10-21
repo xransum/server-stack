@@ -6,15 +6,16 @@
 # Usage:
 #   docker compose --profile media up -d
 #   docker compose --profile media --profile indexers --profile cloudflare-bypass up -d
-#   docker compose --profile proxy up -d
 #
 # Profiles:
 #   media              Plex, Tautulli, Seerr (formerly Overseerr), Calibre-Web
 #   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist
 #   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
-#   proxy              Nginx Proxy Manager (reverse proxy + SSL) + Cloudflare Tunnel
 #   s3                 Reserved profile (MinIO runs natively on TrueNAS)
 #   infra              dns-updater (deprecated — CF Tunnel replaces this)
+#
+# NOTE: The proxy profile (Nginx Proxy Manager, cloudflared, cloudflare-ddns) has been
+#       moved to edge-vm. See compose/docker-compose.edge.yml.
 #
 # NFS mounts (add to /etc/fstab on media-vm before starting):
 #   192.168.1.164:/mnt/media/movies      /mnt/media/movies      nfs  rw,hard,intr,_netdev,noatime  0  0
@@ -319,45 +320,10 @@ services:
       - byparr-unwrap
 
   # ---------------------------------------------------------------------------
-  # PROXY profile
+  # PROXY profile — MOVED TO EDGE-VM
   # ---------------------------------------------------------------------------
-
-  nginx-proxy-manager:
-    <<: *restart-policy
-    image: jc21/nginx-proxy-manager:latest
-    profiles: [proxy]
-    container_name: nginx-proxy-manager
-    ports:
-      - "80:80"
-      - "443:443"
-      - "81:81"   # Nginx PM admin UI - restrict to Tailscale access only
-    volumes:
-      - nginx-pm-data:/data
-      - nginx-pm-letsencrypt:/etc/letsencrypt
-
-  cloudflared:
-    <<: *restart-policy
-    image: cloudflare/cloudflared:latest
-    profiles: [proxy]
-    container_name: cloudflared
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
-
-  cloudflare-ddns:
-    <<: *restart-policy
-    image: favonia/cloudflare-ddns:latest
-    profiles: [proxy]
-    container_name: cloudflare-ddns
-    # Keeps grey-cloud DNS records updated when home IP changes.
-    # Add new game server subdomains to DOMAINS as they are created.
-    environment:
-      CLOUDFLARE_API_TOKEN: ${CF_DDNS_TOKEN}
-      DOMAINS: "plex.xransum.com,mc1.xransum.com,mc2.xransum.com,mc3.xransum.com,valheim.xransum.com,satisfactory.xransum.com,factorio.xransum.com"
-      PROXIED: "false"
-      UPDATE_CRON: "@every 5m"
-      IP6_PROVIDER: "none"
-
+  # nginx-proxy-manager, cloudflared, and cloudflare-ddns have been moved to
+  # edge-vm (192.168.1.173). See compose/docker-compose.edge.yml.
   # ---------------------------------------------------------------------------
   # S3 profile
   # ---------------------------------------------------------------------------
@@ -405,8 +371,6 @@ volumes:
   radarr-config:
   prowlarr-config:
   rdt-client-config:
-  nginx-pm-data:
-  nginx-pm-letsencrypt:
   # ClamAV virus definition database — persisted to avoid re-downloading on restart
   clamav-db:
   portainer-data:

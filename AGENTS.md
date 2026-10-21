@@ -148,14 +148,20 @@ forwards are switched. See `docs/workers/worker-2-decommission.md`.
 - Server: `serverhub` (192.168.1.166), SSH alias configured
 - Repo clone on server: `~/Documents/Gits/server-stack`
 
-### Docker Compose (active production — `media-vm` on Proxmox)
+### Docker Compose (active production — `edge-vm` + `media-vm` on Proxmox)
 
-All services running in `compose/docker-compose.yml` on media-vm (192.168.1.169).
-Fully deployed and operational as of 2026-10-19.
+**edge-vm** (192.168.1.173, Tailscale 100.106.60.22) — ingress layer, operational as of 2026-10-21.
+
+- SSH: `ssh edge-vm` (homelab key, ransum user, passwordless sudo)
+- Compose file: `/opt/edge/server-stack/compose/docker-compose.edge.yml`
+- Services: nginx-proxy-manager, cloudflared, cloudflare-ddns
+- All traffic (CF tunnel + Tailscale-only grey-cloud) enters here
+
+**media-vm** (192.168.1.169, Tailscale 100.107.1.14) — application stack, operational as of 2026-10-19.
 
 - SSH: `ssh media-vm` (homelab key, ransum user, passwordless sudo)
 - Compose files: `/opt/media/server-stack/compose/`
-- All profiles active: media, indexers, proxy, cloudflare-bypass
+- Active profiles: media, indexers, cloudflare-bypass (proxy profile removed — lives on edge-vm)
 
 ---
 
@@ -188,7 +194,8 @@ echo 'PASSWORD' | sudo -S -p '' cp /tmp/file /dest/file
 | Compute server CPU/RAM | AMD Ryzen 9 7950X3D + 64GB G.Skill DDR5-6000 CL36 | Ordered Oct 2026. Full BOM and prices in `docs/homelab-hardware.md`. |
 | Network switch | Dumb 10GbE switch | TP-Link TL-SX1008 or equivalent. Keep the FIOS gateway for routing; do not buy a MikroTik router. |
 | Domain | `xransum.com` | Homelab services live here. `kevin-haas.com` stays pointed at GitHub Pages for the blog. |
-| Dynamic DNS for grey-cloud records | cloudflare-ddns container | `favonia/cloudflare-ddns` runs in the proxy profile on media-vm. Covers plex.xransum.com and all game server subdomains. Add new subdomains to DOMAINS env var in compose/.env and restart. |
+| Dynamic DNS for grey-cloud records | cloudflare-ddns container | `favonia/cloudflare-ddns` runs on edge-vm (`docker-compose.edge.yml`). Covers plex.xransum.com and all game server subdomains. Add new subdomains to DOMAINS env var in `/opt/edge/server-stack/compose/.env` on edge-vm and restart. |
+| Ingress layer | Dedicated edge-vm | NPM + cloudflared + cloudflare-ddns on edge-vm (192.168.1.173). media-vm is application-only. New services get an NPM proxy host on edge-vm pointing at their LAN IP. |
 
 ## Open decisions (do not resolve without updating this file + session log)
 

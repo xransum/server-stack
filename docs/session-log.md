@@ -9,6 +9,32 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-21 — Worker 7: edge-vm — dedicated ingress layer
+
+**Context:** media-vm was doing double duty as application host and ingress layer (NPM + cloudflared + cloudflare-ddns). As the homelab grows with more VMs and services, a dedicated edge VM isolates all traffic routing from the application stack. Also enables portless URLs for proxmox.xransum.com and nas.xransum.com.
+
+**Done:**
+
+- **VM ID renumber** — devbox-1 (103→104), devbox-template (102→103) via LVM thin `lvrename` + conf file move on Proxmox. Full clone confirmed (disk references independent).
+- **edge-vm provisioned** — Ubuntu 24.04, VM 102, 192.168.1.173, Tailscale 100.106.60.22. Bootstrap: Docker, Tailscale, passwordless sudo, homelab key. SSH aliases `edge-vm` / `edge-vm-lan` added to Windows SSH config.
+- **`compose/docker-compose.edge.yml` created** — cloudflared, NPM, cloudflare-ddns. Same tunnel token as media-vm (one tunnel, one connector on edge-vm).
+- **NPM volumes migrated** from media-vm → Windows → edge-vm. All proxy host backends updated from Docker service names to LAN IPs via NPM REST API (direct SQLite edits don't regenerate nginx configs — must use API).
+- **Let's Encrypt certs issued** for `proxmox.xransum.com` and `nas.xransum.com` via NPM API DNS-01/Cloudflare challenge.
+- **Cutover** — router port 443 switched to edge-vm (192.168.1.173). DNS grey-cloud A records updated: `docker`, `proxmox`, `nas` all point to edge-vm Tailscale IP (100.106.60.22).
+- **media-vm proxy profile stopped** — nginx-proxy-manager, cloudflared, cloudflare-ddns containers removed. `docker-compose.yml` stripped of proxy profile services and volumes.
+- **All 11 services verified** HTTP 200/401 post-cutover.
+
+**Gotchas:**
+- NPM direct SQLite edits do not regenerate nginx configs. Always use the REST API to update proxy hosts.
+- NPM's compose project is `edge-stack` so volume names are prefixed `edge-stack_nginx-pm-*`, not `nginx-pm-*`.
+- NPM cert API (`POST /api/nginx/certificates`) rejects `letsencrypt_agree`/`letsencrypt_email` in meta — only `dns_challenge`, `dns_provider`, `dns_provider_credentials`, `propagation_seconds` are valid meta fields.
+- The `cf` CLI `--body` flag is broken in PowerShell (rejects valid JSON strings). Workaround: use `Invoke-RestMethod` directly with the OAuth token from `~/.config/cloudflare/config/default.json`.
+- Proxmox Ubuntu 24.04 VM installer hangs on "installing missing packages" with 1GB RAM — Ubuntu Server requires 1.5GB minimum for ISO install. Used 2GB for install, can drop to 1.5GB post-install.
+
+**Worker 7 status: ✅ completed.**
+
+---
+
 ## 2026-10-21 — proxmox.xransum.com + nas.xransum.com moved to Tailscale-only
 
 **Context:** Both `proxmox.xransum.com` and `nas.xransum.com` were previously routed through the Cloudflare tunnel (orange-cloud CNAME → cloudflared → NPM → backend). This is unnecessary for admin UIs that are only accessed by the homelab owner over Tailscale — the same pattern already used for `docker.xransum.com` (Portainer). Moving them off the tunnel removes NPM from the path and lets the browser talk directly to each service's own HTTPS UI.
