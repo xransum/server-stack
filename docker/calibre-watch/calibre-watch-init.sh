@@ -1,9 +1,8 @@
 #!/usr/bin/with-contenv bash
 # /custom-cont-init.d/99-calibre-watch
-# Launches the books/ready import watcher inside the calibre-web container.
-# Watches /import (books/ready mount), not /books (the library itself).
-# Files are written by shelfmark-post-process.py via atomic rename, so they
-# appear complete — no partial-file race. Processes files sequentially.
+# Launches the books/ready import poller inside the calibre-web container.
+# Polls /import (books/ready mount) every 15s — inotify is unreliable over
+# NFS when the writer (shelfmark container) is a different NFS client.
 
 WATCH_SCRIPT="/config/calibre-watch.sh"
 IMPORT_DIR="/import"
@@ -67,31 +66,21 @@ import_file() {
     fi
 }
 
-log "Watcher started — monitoring $IMPORT_DIR"
+log "Poller started — monitoring $IMPORT_DIR every 15s"
 
-# Process any files already present at startup
-find "$IMPORT_DIR" -maxdepth 1 -type f | while read -r existing; do
-    import_file "$existing"
-done
-
-# Then watch for new arrivals
-inotifywait -m -e moved_to -e close_write --format '%w%f' "$IMPORT_DIR" 2>/dev/null | \
-while read -r filepath; do
-    [ -f "$filepath" ] || continue
-    import_file "$filepath"
+# Poll loop — runs forever, processes any ebook files found in IMPORT_DIR
+while true; do
+    find "$IMPORT_DIR" -maxdepth 1 -type f | while read -r file; do
+        import_file "$file"
+    done
+    sleep 15
 done
 SCRIPT
 
 chmod +x "$WATCH_SCRIPT"
 
-# Ensure inotifywait is available
-if ! command -v inotifywait &>/dev/null; then
-    echo "[calibre-watch] Installing inotify-tools..."
-    apt-get install -y inotify-tools &>/dev/null
-fi
-
-# Kill any stale watcher from a previous container start
+# Kill any stale poller from a previous container start
 pkill -f calibre-watch.sh 2>/dev/null || true
 
 nohup bash "$WATCH_SCRIPT" >> "$LOG" 2>&1 &
-echo "[calibre-watch] Watcher started (PID $!), monitoring $IMPORT_DIR"
+echo "[calibre-watch] Poller started (PID $!), monitoring $IMPORT_DIR"
