@@ -93,7 +93,5 @@ fi
 # Kill any stale watcher from a previous container start
 pkill -f calibre-watch.sh 2>/dev/null || true
 
-# Launch watcher as abc (uid 1000) so it can delete files from NFS mounts
-# Root is squashed by NFS root_squash — abc is not
-nohup s6-setuidgid abc bash "$WATCH_SCRIPT" >> "$LOG" 2>&1 &
-echo "[calibre-watch] Watcher started (PID $!), monitoring $IMPORT_DIR as abc"
+nohup bash "$WATCH_SCRIPT" >> "$LOG" 2>&1 &
+echo "[calibre-watch] Watcher started (PID $!), monitoring $IMPORT_DIR"
