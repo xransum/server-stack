@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-21 (Worker 7 complete — edge-vm live, media-vm app-only)
+Last updated: 2026-10-21 (Worker 8 complete — Shelfmark live at shelfmark.xransum.com)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -56,6 +56,7 @@ Profiles active: `media`, `indexers`, `cloudflare-bypass`
 | rdt-blocklist | ✅ | DRY_RUN=false, new API keys |
 | scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
+| shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; UI config (Prowlarr/rdt-client) still needed |
 | portainer | ✅ | docker.xransum.com, Tailscale-only, Let's Encrypt cert via DNS-01 |
 
 Known issues (cosmetic, not blocking):
@@ -70,7 +71,7 @@ Known issues (cosmetic, not blocking):
 overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm
 
 ### CF Tunnel (orange cloud) → NPM → backend
-overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm,
+overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, shelfmark,
 pelican (→ Pelican Panel on gameservers-vm:80),
 gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
@@ -151,6 +152,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 5 — Portainer | ✅ completed | docker.xransum.com live, Tailscale-only |
 | Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
 | Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
+| Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; UI config (Prowlarr/rdt-client) still needed |
 
 ---
 
