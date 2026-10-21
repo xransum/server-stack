@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-20 (Worker 6 complete)
+Last updated: 2026-10-21 (proxmox + nas moved to Tailscale-only grey-cloud A records)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -54,16 +54,18 @@ Known issues (cosmetic, not blocking):
 ## DNS — xransum.com
 
 ### CF Tunnel (orange cloud) → NPM → container
-overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas
+overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm
 
 ### CF Tunnel (orange cloud) → NPM → backend
-overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, proxmox, nas,
+overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm,
 pelican (→ Pelican Panel on gameservers-vm:80),
 gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
-### Grey cloud (direct A record, DDNS-managed by cloudflare-ddns on media-vm)
+### Grey cloud (direct A record — Tailscale-only or DDNS-managed)
 - plex.xransum.com → home IP 96.231.19.234 → router → media-vm:443 (NPM+SSL) + 32400 (direct)
 - docker.xransum.com → 100.107.1.14 (Tailscale IP, static — NOT managed by cloudflare-ddns)
+- proxmox.xransum.com → 100.77.224.51 (Tailscale IP, static — direct HTTPS to Proxmox UI :8006)
+- nas.xransum.com → 100.67.119.85 (Tailscale IP, static — direct HTTP to TrueNAS UI :80)
 - mc1, mc2, mc3, valheim, satisfactory, factorio → home IP (port forwards set up ✅)
 
 ### SRV records (Minecraft — players connect without specifying port)

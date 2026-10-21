@@ -9,6 +9,30 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-10-21 — proxmox.xransum.com + nas.xransum.com moved to Tailscale-only
+
+**Context:** Both `proxmox.xransum.com` and `nas.xransum.com` were previously routed through the Cloudflare tunnel (orange-cloud CNAME → cloudflared → NPM → backend). This is unnecessary for admin UIs that are only accessed by the homelab owner over Tailscale — the same pattern already used for `docker.xransum.com` (Portainer). Moving them off the tunnel removes NPM from the path and lets the browser talk directly to each service's own HTTPS UI.
+
+**Done:**
+
+- **Cloudflare Tunnel ingress rules removed** — pushed updated config to tunnel `8cd27584-61f9-4d09-bf14-09d5573ad366` (version 8) with `proxmox.xransum.com` and `nas.xransum.com` entries deleted. Remaining rules: overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, pelican, gameservers-vm + `http_status:404` catch-all.
+- **Cloudflare DNS records swapped** — deleted orange-cloud CNAMEs (both pointed at `8cd27584-...cfargotunnel.com`), created grey-cloud A records:
+  - `proxmox.xransum.com` → `100.77.224.51` (Proxmox Tailscale IP)
+  - `nas.xransum.com` → `100.67.119.85` (TrueNAS Tailscale IP)
+- **NPM proxy hosts deleted** — soft-deleted rows 10 and 11 in NPM's SQLite database (`is_deleted=1`), copied DB back into container, restarted NPM. NPM no longer serves these hostnames.
+- **DNS verified** — `nslookup proxmox.xransum.com` returns `100.77.224.51`; `nslookup nas.xransum.com` returns `100.67.119.85`. No Cloudflare proxy in path.
+
+**Access pattern going forward:**
+
+- `https://proxmox.xransum.com:8006` — Tailscale required, browser hits Proxmox directly (self-signed cert, browser warning expected unless cert pinned)
+- `http://nas.xransum.com` — Tailscale required, browser hits TrueNAS UI directly
+
+**Why not NPM+SSL for these:** Both services have their own HTTPS and the only users are the homelab owner on Tailscale. Adding NPM+cert management adds complexity with no benefit. Consistent with the `docker.xransum.com` precedent.
+
+**Gotcha — `cf` CLI `--body` flag broken in PowerShell:** The `cf` CLI's `--body` flag rejects JSON passed as a PowerShell string (even valid compact JSON). Workaround: used `Invoke-RestMethod` directly against the Cloudflare API (`PUT /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations`) with the OAuth token from `~/.config/cloudflare/config/default.json`. Similarly, `cf dns records create` has no individual flags — also used the REST API directly for DNS record creation.
+
+---
+
 ## 2026-10-20 — Worker 6: Overseerr → Seerr migration
 
 **Context:** Overseerr deprecated upstream; migrated to Seerr (the official successor) on media-vm. Service continued operating at `https://overseerr.xransum.com` — no DNS, NPM, or CF tunnel changes needed.
