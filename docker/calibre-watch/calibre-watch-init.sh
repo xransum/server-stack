@@ -55,8 +55,11 @@ import_file() {
 
     if [ $exit_code -eq 0 ] || echo "$result" | grep -qiE "already exists|duplicate"; then
         log "Imported OK (or already exists): $filename"
-        rm -f "$file"
-        log "Deleted source: $filename"
+        if rm -f "$file"; then
+            log "Deleted source: $filename"
+        else
+            log "WARNING: could not delete source (permission issue?): $filename"
+        fi
     else
         log "ERROR importing $filename: $result"
         mkdir -p "$FAILED_DIR"
@@ -90,6 +93,7 @@ fi
 # Kill any stale watcher from a previous container start
 pkill -f calibre-watch.sh 2>/dev/null || true
 
-# Launch watcher in background
-nohup bash "$WATCH_SCRIPT" >> "$LOG" 2>&1 &
-echo "[calibre-watch] Watcher started (PID $!), monitoring $IMPORT_DIR"
+# Launch watcher as abc (uid 1000) so it can delete files from NFS mounts
+# Root is squashed by NFS root_squash — abc is not
+nohup s6-setuidgid abc bash "$WATCH_SCRIPT" >> "$LOG" 2>&1 &
+echo "[calibre-watch] Watcher started (PID $!), monitoring $IMPORT_DIR as abc"

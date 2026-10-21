@@ -101,7 +101,8 @@ services:
     container_name: calibre-web
     environment:
       <<: *puid-pgid
-      DOCKER_MODS: linuxserver/mods:universal-calibre
+      DOCKER_MODS: linuxserver/mods:universal-calibre|linuxserver/mods:universal-package-install
+      INSTALL_PACKAGES: inotify-tools
     volumes:
       - calibre-web-config:/config
       - /mnt/media/books:/books
