@@ -85,6 +85,24 @@ Runs inside the calibre-web container. Watches `/import` (`books/ready` mount), 
 - **rdt-blocklist**: shelfmark-sourced torrents are not tracked by Sonarr/Radarr, so rdt-blocklist will not find them in the queue. It operates on the rdt-client DB — confirm it does not choke on unknown download IDs (it should just skip them).
 - **scan-media scans the parent directory**: `shelfmark-post-process.py` sends the book path; scan-media scans its parent dir. Shelfmark's Author/Title folder layout means each book is in its own subfolder, so the scan stays scoped. Confirm this in the Shelfmark output settings (Folder mode, Author/Title organization).
 
+## Adding ebook indexers to Prowlarr
+
+Prowlarr's built-in ebook indexers are limited. Custom Cardigann definitions
+live in `compose/custom-definitions/` and are mounted read-only into Prowlarr
+at `/config/Definitions/Custom/`. No restart needed — Prowlarr picks them up
+dynamically.
+
+| Definition | File | URL | Notes |
+|---|---|---|---|
+| AudioBookBay | `compose/custom-definitions/audiobookbay.lu` | `https://audiobookbay.lu/` | Sister site of EBookBay (ebb.la). ebb.la's cert is issued for audiobookbay.lu so that mirror fails SSL — use this definition instead. |
+
+To add AudioBookBay in Prowlarr: Indexers → Add → Cardigann → search "AudioBookBay".
+
+**EBookBay (ebb.la) SSL failure:** `ebb.la` presents a cert issued for
+`audiobookbay.lu` — hostname mismatch causes SSL errors regardless of DNS
+settings. The custom `audiobookbay.yml` definition points directly at the
+working hostname and shares the same cert fingerprint.
+
 ## Adding to Nginx Proxy Manager / CF Tunnel
 
 Once Shelfmark authentication is configured, add an NPM proxy host on edge-vm:
