@@ -99,6 +99,15 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
 ---
 
+## TrueNAS (192.168.1.164)
+
+- `media` pool: 2 x MIRROR vdevs, mixed capacity — 20TB total, ~39% used
+  - mirror-0: 2 x 10.9TB (original)
+  - mirror-1: 2 x 9.1TB (added 2026-10-21, ex-serverhub RAID pair WP025G10 + WP0268FG)
+- Boot pool: 223.6GB SSD
+
+---
+
 ## gameservers-vm (192.168.1.170)
 
 - Proxmox VM 101: Ubuntu 24.04, 12 vCPU, 32GB RAM, 512GB NVMe
@@ -124,10 +133,10 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
 ## Serverhub (192.168.1.166)
 
-- **DECOMMISSIONED** ✅ — powered off 2026-10-19
-- RTX 2070 still installed (needs to move to Proxmox for Worker 1)
-- Game server home dirs preserved: `/home/minecraft/`, `/home/steam/`
-- Media files on RAID intact (not deleted — kept as backup reference)
+- **FULLY DECOMMISSIONED** ✅ — drives pulled 2026-10-21, physically dead
+- RTX 2070 moved to Proxmox ✅
+- All data either migrated or confirmed nukable (MC servers in Pelican, Steam worlds discarded)
+- All HDDs wiped and sorted: 9.1TB pair → TrueNAS, remainder trashed or on retainer
 
 ---
 
@@ -135,7 +144,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
 | Worker | Status | Notes |
 |---|---|---|
-| Worker 1 — GPU Passthrough | ⏳ pending | Trigger: RTX 2070 physically in Proxmox (after serverhub powered off) |
+| Worker 1 — GPU Passthrough | ✅ completed | RTX 2070 in Proxmox, passthrough to media-vm, NVENC active in Plex |
 | Worker 2 — Decommission | ✅ completed | Serverhub powered off, all services fixed |
 | Worker 3 — Game Servers | ✅ completed | gameservers-vm live, Pelican+Wings deployed, 7 MC servers migrated |
 | Worker 4 — Devboxes | ✅ completed | devbox-template (VM 102) live as Proxmox template, Tailscale up |

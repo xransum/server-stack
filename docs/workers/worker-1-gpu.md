@@ -1,7 +1,7 @@
 # Worker 1 — GPU Passthrough
 
 ## Status
-⏳ pending
+✅ completed
 
 ## Trigger
 RTX 2070 must be physically installed in the Proxmox machine before starting this session.
@@ -158,4 +158,14 @@ git push
 
 ## Completion Notes
 
-(fill in when done)
+- RTX 2070 physically moved from serverhub to Proxmox machine
+- IOMMU confirmed active (AMD-Vi), GPU at PCI `01:00.0` in IOMMU group 15 (all 4 functions in same group)
+- GPU added to media-vm (VM 100) via `qm set 100 --hostpci0 host=0000:01:00.0;0000:01:00.1;0000:01:00.2;0000:01:00.3,pcie=1,rombar=1`
+- NVIDIA drivers installed: `nvidia-driver-550` pulled in `nvidia-driver-580` (580.178.04) on Ubuntu 24.04 — both installed, 580 is the active driver
+- Secure Boot blocked the nvidia kernel module (`Key was rejected by service`) — fixed by:
+  1. Setting `pre-enrolled-keys=0` on the EFI disk via `qm set`
+  2. Entering OVMF BIOS via GRUB → UEFI Firmware Settings → Device Manager → Secure Boot Configuration → disabled Attempt Secure Boot
+- NVIDIA Container Toolkit installed and configured for Docker runtime
+- GPU block already present in `docker-compose.yml` — Plex restarted with GPU access confirmed (`nvidia-smi` inside Plex container works)
+- Plex Settings → Transcoder: hardware acceleration enabled, hardware-accelerated video encoding enabled
+- GRUB timeout set to 3 seconds (was 10 during debug), boot menu arg removed from VM config
