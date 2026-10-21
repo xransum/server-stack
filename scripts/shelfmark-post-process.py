@@ -9,9 +9,9 @@ with a JSON payload on stdin when CUSTOM_SCRIPT_JSON_PAYLOAD=true.
 Pipeline:
 1. Resolve the book path from JSON stdin (paths.final_paths[0]) or $1 fallback.
 2. POST to scan-media sidecar. Only HTTP 200 + status=="clean" passes.
-3. On clean: move ebook files to /mnt/media/downloads/books-ready (atomic rename).
+3. On clean: move ebook files to /mnt/media/downloads/books/ready (atomic rename).
 4. On infected/error/exception: exit 1 → Shelfmark marks task Error.
-   Files stay in books-incoming for manual review.
+   Files stay in books/incoming for manual review.
 
 The script is intentionally strict (fail closed). Radarr/Sonarr are lenient on
 scan errors; Shelfmark is not, because infected ebooks would land directly in
@@ -31,7 +31,7 @@ from urllib import request as urlrequest
 from urllib.error import URLError
 
 SCAN_URL = os.environ.get("SCAN_MEDIA_URL", "http://scan-media:8080/scan")
-BOOKS_READY = Path(os.environ.get("BOOKS_READY_DIR", "/mnt/media/downloads/books-ready"))
+BOOKS_READY = Path(os.environ.get("BOOKS_READY_DIR", "/mnt/media/downloads/books/ready"))
 SCAN_TIMEOUT = 280  # seconds — Shelfmark kills the script at 300s
 
 EBOOK_EXTENSIONS = {
@@ -186,16 +186,16 @@ def main() -> int:
     status = result.get("status", "")
 
     if status == "clean":
-        log.info("Scan clean — moving to books-ready")
+        log.info("Scan clean — moving to books/ready")
         try:
             move_to_ready(book_path)
         except Exception as exc:
-            log.error("Failed to move files to books-ready: %s", exc)
+            log.error("Failed to move files to books/ready: %s", exc)
             return 1
         return 0
 
     # Any other status (scan_error, skipped, infected, unknown) — fail closed
-    log.error("Scan result '%s' — leaving files in books-incoming for manual review", status)
+    log.error("Scan result '%s' — leaving files in books/incoming for manual review", status)
     return 1
 
 

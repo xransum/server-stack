@@ -1,7 +1,7 @@
 #!/usr/bin/with-contenv bash
 # /custom-cont-init.d/99-calibre-watch
-# Launches the books-ready import watcher inside the calibre-web container.
-# Watches /import (books-ready mount), not /books (the library itself).
+# Launches the books/ready import watcher inside the calibre-web container.
+# Watches /import (books/ready mount), not /books (the library itself).
 # Files are written by shelfmark-post-process.py via atomic rename, so they
 # appear complete — no partial-file race. Processes files sequentially.
 

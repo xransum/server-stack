@@ -59,7 +59,7 @@ def notify_discord_infected(source_title: str, service: str, deleted: list[str])
     files_value = "\n".join(f"`{Path(f).name}`" for f in deleted) or "`(unknown)`"
     action = "Deleted" if service == "shelfmark" else "Deleted + Blocklisted"
     footer = (
-        "Files deleted from books-incoming. No blocklist (Shelfmark)."
+        "Files deleted from books/incoming. No blocklist (Shelfmark)."
         if service == "shelfmark"
         else "This release has been blocklisted and will not be grabbed again."
     )

@@ -17,12 +17,12 @@ Readarr is deprecated. Shelfmark is in maintenance mode (bug fixes only) and doe
 User (Shelfmark UI)
   → search via Prowlarr indexers
   → grab torrent → rdt-client (qBittorrent mode, category: books)
-  → rdt-client downloads to /mnt/media/downloads/books-incoming
+  → rdt-client downloads to /mnt/media/downloads/books/incoming
   → Shelfmark Custom Script hook: scripts/shelfmark-post-process.py
       → POST to scan-media:8080/scan (ClamAV)
-      → clean: mv files to /mnt/media/downloads/books-ready
+      → clean: mv files to /mnt/media/downloads/books/ready
       → infected/error: exit 1 → Shelfmark marks task Error, files stay for manual review
-  → calibre-web watcher (/import = books-ready)
+  → calibre-web watcher (/import = books/ready)
       → calibredb add <file>
       → success: delete source
       → failure: move to /import/failed
@@ -34,9 +34,9 @@ All paths are under `/mnt/media/downloads/` (existing NFS mount — no new NFS e
 
 | Path | Purpose |
 |---|---|
-| `/mnt/media/downloads/books-incoming` | rdt-client download target (Shelfmark `INGEST_DIR`) |
-| `/mnt/media/downloads/books-ready` | Scanned clean files waiting for Calibre import |
-| `/mnt/media/downloads/books-ready/failed` | Files calibredb failed to import — manual review |
+| `/mnt/media/downloads/books/incoming` | rdt-client download target (Shelfmark `INGEST_DIR`) |
+| `/mnt/media/downloads/books/ready` | Scanned clean files waiting for Calibre import |
+| `/mnt/media/downloads/books/ready/failed` | Files calibredb failed to import — manual review |
 | `/mnt/media/books` | Calibre library (never written by Shelfmark or rdt-client) |
 
 ## Setup (Shelfmark UI — not committed)
@@ -45,7 +45,7 @@ After first start at `http://media-vm:8084`:
 
 1. **Prowlarr**: URL `http://prowlarr:9696`, API key from Prowlarr Settings → General
 2. **Torrent client**: qBittorrent mode, URL `http://rdt-client:6500`, same credentials Sonarr/Radarr use, category `books`
-3. **Output**: Folder mode, path `/mnt/media/downloads/books-incoming`, organize by Author/Title
+3. **Output**: Folder mode, path `/mnt/media/downloads/books/incoming`, organize by Author/Title
 
 ### Fallback: native Real-Debrid client
 
@@ -61,14 +61,14 @@ If qBittorrent mode fails (Shelfmark issues #470/#607 — blank "Failed to add t
 - Reads JSON payload from stdin (`paths.final_paths[0]`) or `$1` fallback
 - POSTs to `scan-media:8080/scan` with a 280s timeout (Shelfmark kills at 300s)
 - Strict fail-closed: only `status == "clean"` passes; `scan_error`, `skipped`, infected, or any exception → exit 1
-- On clean: moves ebook files (`.epub`, `.pdf`, `.mobi`, `.azw3`, etc.) to `books-ready` via atomic rename
-- On failure: files stay in `books-incoming` for manual review; Shelfmark task shows Error
+- On clean: moves ebook files (`.epub`, `.pdf`, `.mobi`, `.azw3`, etc.) to `books/ready` via atomic rename
+- On failure: files stay in `books/incoming` for manual review; Shelfmark task shows Error
 
 scan-media does NOT blocklist for Shelfmark (no API to call). Discord notification still fires on infection.
 
 ## Calibre-Web watcher (`docker/calibre-watch/calibre-watch-init.sh`)
 
-Runs inside the calibre-web container. Watches `/import` (`books-ready` mount), not `/books` (the library).
+Runs inside the calibre-web container. Watches `/import` (`books/ready` mount), not `/books` (the library).
 
 - Processes files already present at container startup
 - `inotifywait -m -e moved_to -e close_write` for new arrivals

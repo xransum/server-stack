@@ -105,8 +105,8 @@ services:
     volumes:
       - calibre-web-config:/config
       - /mnt/media/books:/books
-      # books-ready: shelfmark-post-process.py drops clean ebooks here; watcher imports them
-      - /mnt/media/downloads/books-ready:/import
+      # books/ready: shelfmark-post-process.py drops clean ebooks here; watcher imports them
+      - /mnt/media/downloads/books/ready:/import
       # Auto-import watcher — inotifywait on /import, calibredb add per file, then delete
       - ../docker/calibre-watch/calibre-watch-init.sh:/custom-cont-init.d/99-calibre-watch:ro
     ports:
@@ -245,8 +245,8 @@ services:
       # Needs write access to delete infected files from all libraries
       - /mnt/media/movies:/mnt/media/movies
       - /mnt/media/tv:/mnt/media/tv
-      # books-incoming: shelfmark hook sends paths here; scan-media must resolve them identically
-      - /mnt/media/downloads/books-incoming:/mnt/media/downloads/books-incoming
+      # books/incoming: shelfmark hook sends paths here; scan-media must resolve them identically
+      - /mnt/media/downloads/books/incoming:/mnt/media/downloads/books/incoming
       # Persist ClamAV virus definitions — avoids re-downloading ~300MB on every restart
       - clamav-db:/var/lib/clamav
 
@@ -257,14 +257,15 @@ services:
     container_name: shelfmark
     environment:
       <<: *puid-pgid
-      INGEST_DIR: /mnt/media/downloads/books-incoming
+      INGEST_DIR: /mnt/media/downloads/books/incoming
+      BOOKS_READY_DIR: /mnt/media/downloads/books/ready
       CUSTOM_SCRIPT: /scripts/post_process.py
       CUSTOM_SCRIPT_JSON_PAYLOAD: "true"
     volumes:
       - shelfmark-config:/config
       # Downloads mount must match rdt-client's exactly for path resolution
       - /mnt/media/downloads:/mnt/media/downloads
-      # Post-process hook: scans via scan-media, moves clean files to books-ready
+      # Post-process hook: scans via scan-media, moves clean files to books/ready
       - ../scripts/shelfmark-post-process.py:/scripts/post_process.py:ro
     ports:
       - "8084:8084"
