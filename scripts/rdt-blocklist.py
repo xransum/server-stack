@@ -1,36 +1,36 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """rdt-blocklist.py
 
 Watches the rdt-client SQLite database for torrents stuck with a Real-Debrid
 provider error (infringing file, task cancellation, etc.), finds the
 corresponding item in the Sonarr and/or Radarr download queue, blocklists it,
-and triggers a fresh search — all without any human intervention.
+and triggers a fresh search â€” all without any human intervention.
 
 Background
 ----------
 When Real-Debrid rejects a torrent hash as infringing, rdt-client records the
 error in its local database but does not propagate a failure signal back to
 Sonarr/Radarr. From their perspective the download client (rdt-client posing as
-qBittorrent) shows `status=warning, trackedDownloadStatus=ok` — the item sits
+qBittorrent) shows `status=warning, trackedDownloadStatus=ok` â€” the item sits
 in the queue indefinitely and Sonarr/Radarr never grab an alternative release.
 
 queue-cleaner.py handles the zero-size stalled variant of this failure. This
 script handles two additional failure modes:
 
-  Mode A — RDT provider error (original behaviour)
+  Mode A â€” RDT provider error (original behaviour)
   -------------------------------------------------
   rdt-client recorded a concrete error from Real-Debrid (infringing file,
   task cancelled, etc.). The DB row has a non-empty Error column.
   Action: blocklist in *arr + delete from DB + trigger re-search.
 
-  Mode B — stuck in processing state (new)
+  Mode B â€” stuck in processing state (new)
   ----------------------------------------
   rdt-client sent the torrent to Real-Debrid and it entered a processing
   state (magnet_conversion, waiting_files_selection, etc.) but never
   progressed. No error is recorded; the item just sits forever. Detected
   by checking RdStatusRaw against a list of stuck states AND requiring that
   the row is older than STUCK_PROCESSING_MINUTES (default: 120).
-  Action: same as Mode A — blocklist + delete + re-search.
+  Action: same as Mode A â€” blocklist + delete + re-search.
 
 Configuration
 -------------
@@ -183,7 +183,7 @@ def get_stuck_torrents(
         rd_status_raw = (rd_status_raw or "").strip().lower()
         name = name or ""
 
-        # Mode A — concrete RDT provider error
+        # Mode A â€” concrete RDT provider error
         if error and any(p.lower() in error.lower() for p in error_patterns):
             stuck.append({
                 "id": torrent_id,
@@ -193,7 +193,7 @@ def get_stuck_torrents(
             })
             continue
 
-        # Mode B — stuck in processing state past the timeout
+        # Mode B â€” stuck in processing state past the timeout
         if stuck_statuses and rd_status_raw in [s.lower() for s in stuck_statuses]:
             if not error:  # don't double-count Mode A
                 added_dt = parse_dt(added or "")
@@ -343,7 +343,7 @@ def process_app(
                 if torrent["id"] not in cleaned_rdt:
                     delete_rdt_torrent(db_path, torrent["id"], dry_run)
                     cleaned_rdt.add(torrent["id"])
-            break  # matched — move on to next stuck torrent
+            break  # matched â€” move on to next stuck torrent
 
 
 # ---------------------------------------------------------------------------
@@ -440,14 +440,14 @@ if __name__ == "__main__":
 Watches the rdt-client SQLite database for torrents stuck with a Real-Debrid
 provider error (infringing file, task cancellation, etc.), finds the
 corresponding item in the Sonarr and/or Radarr download queue, blocklists it,
-and triggers a fresh search — all without any human intervention.
+and triggers a fresh search â€” all without any human intervention.
 
 Background
 ----------
 When Real-Debrid rejects a torrent hash as infringing, rdt-client records the
 error in its local database but does not propagate a failure signal back to
 Sonarr/Radarr. From their perspective the download client (rdt-client posing as
-qBittorrent) shows `status=warning, trackedDownloadStatus=ok` — the item sits
+qBittorrent) shows `status=warning, trackedDownloadStatus=ok` â€” the item sits
 in the queue indefinitely and Sonarr/Radarr never grab an alternative release.
 
 queue-cleaner.py handles the zero-size stalled variant of this failure. This
@@ -692,7 +692,7 @@ def process_app(
                 if torrent["id"] not in cleaned_rdt:
                     delete_rdt_torrent(db_path, torrent["id"], dry_run)
                     cleaned_rdt.add(torrent["id"])
-            break  # matched — move on to next stuck torrent
+            break  # matched â€” move on to next stuck torrent
 
 
 # ---------------------------------------------------------------------------
