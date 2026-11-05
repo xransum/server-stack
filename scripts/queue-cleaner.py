@@ -128,6 +128,22 @@ def _age_ok(item: dict, min_age_minutes: int, now: datetime) -> tuple[bool, str]
     return True, f"age={age_min:.1f}m"
 
 
+def _status_messages_text(item: dict) -> str:
+    """
+    Flatten all statusMessages titles and messages into a single string for
+    pattern matching. Sonarr uses statusMessages (not errorMessage) for
+    importBlocked failures — errorMessage is null in that case.
+    """
+    parts = []
+    for sm in item.get("statusMessages") or []:
+        if sm.get("title"):
+            parts.append(sm["title"])
+        for msg in sm.get("messages") or []:
+            if msg:
+                parts.append(msg)
+    return " | ".join(parts)
+
+
 def classify(
     item: dict,
     patterns: list[str],
@@ -147,22 +163,45 @@ def classify(
       None             — no match, skip
 
     reason is a short human-readable string for logging.
-    """
-    if item.get("status") != "warning":
-        return None, f"status={item.get('status')!r}"
 
-    err = (item.get("errorMessage") or "").strip()
+    Sonarr queue item shapes by failure type:
+      Mode 1 (stall):        status=warning,   errorMessage=<string>, size=0, sizeleft=0
+      Mode 2 (importBlocked):status=completed, trackedDownloadState=importBlocked,
+                             errorMessage=null, statusMessages=[...] contains the error
+      Mode 3 (not-upgrade):  status=warning,   errorMessage=<string>
+    """
+    status = item.get("status")
+    tracked_state = item.get("trackedDownloadState", "")
 
     # Age gate applies to all modes
     age_ok, age_reason = _age_ok(item, min_age_minutes, now)
 
-    # Mode 3 — force upgrade (check before Mode 1/2 since error strings differ)
+    # Mode 2 — importBlocked: status=completed, trackedDownloadState=importBlocked
+    # Error text lives in statusMessages, not errorMessage.
+    if status == "completed" and tracked_state == "importBlocked":
+        if import_fail_patterns:
+            sm_text = _status_messages_text(item)
+            if _matches_patterns(sm_text, import_fail_patterns):
+                if not age_ok:
+                    return None, f"import_fail candidate but {age_reason}"
+                return "import_fail", f"import_fail ({age_reason}, statusMessages={sm_text!r})"
+            return None, f"importBlocked but statusMessages={sm_text!r} does not match IMPORT_FAIL_PATTERNS"
+        return None, "importBlocked but IMPORT_FAIL_PATTERNS is empty"
+
+    # Modes 1 and 3 require status=warning
+    if status != "warning":
+        return None, f"status={status!r}"
+
+    err = (item.get("errorMessage") or "").strip()
+
+    # Mode 3 — force upgrade (check before Mode 1 since error strings differ)
     if force_upgrade_enabled and _matches_patterns(err, force_upgrade_patterns):
         if not age_ok:
             return None, f"force_upgrade candidate but {age_reason}"
         return "force_upgrade", f"force_upgrade ({age_reason}, err={err!r})"
 
-    # Mode 2 — import fail (no size check)
+    # Mode 2 fallback — some *arr versions put import errors in errorMessage
+    # with status=warning rather than importBlocked. Handle both.
     if import_fail_patterns and _matches_patterns(err, import_fail_patterns):
         if not age_ok:
             return None, f"import_fail candidate but {age_reason}"
@@ -319,7 +358,7 @@ def process_instance(
             now,
         )
         if mode is None:
-            log(f"DEBUG [{name}] skip id={item_id} title={title!r}: {reason}")
+            log(f"DEBUG [{name}] skip id={item_id} title={title!r} status={item.get('status')!r} trackedState={item.get('trackedDownloadState')!r}: {reason}")
             continue
         classified.append((item, mode, reason))
 
