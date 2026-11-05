@@ -134,7 +134,9 @@ def _matches_patterns(text: str, patterns: list[str]) -> bool:
 def _age_ok(item: dict, min_age_minutes: int, now: datetime) -> tuple[bool, str]:
     added = parse_added(item.get("added", ""))
     if added is None:
-        return False, "missing/invalid added timestamp"
+        # Sonarr sometimes omits the added timestamp for completed/importBlocked
+        # items. Treat missing timestamp as infinitely old -- always passes.
+        return True, "age=unknown (no timestamp, treating as old enough)"
     age_min = (now - added).total_seconds() / 60.0
     if age_min < min_age_minutes:
         return False, f"age={age_min:.1f}m < {min_age_minutes}m"
