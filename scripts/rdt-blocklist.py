@@ -325,6 +325,7 @@ def process_app(
     cleaned_rdt: set[str] = set()
 
     for torrent in stuck:
+        matched = False
         for item in queue:
             title = item.get("title", "")
             if not names_match(torrent["name"], title):
@@ -336,6 +337,7 @@ def process_app(
                 f"INFO  [{app}] matched torrent '{torrent['name']}' "
                 f"-> queue id={queue_id} title={title!r} | {torrent['reason']}"
             )
+            matched = True
 
             if blocklist_queue_item(base_url, api_key, queue_id, app, dry_run):
                 if media_id:
@@ -344,6 +346,17 @@ def process_app(
                     delete_rdt_torrent(db_path, torrent["id"], dry_run)
                     cleaned_rdt.add(torrent["id"])
             break  # matched -- move on to next stuck torrent
+
+        if not matched and torrent["id"] not in cleaned_rdt:
+            # No queue entry found -- Sonarr/Radarr already removed it (e.g.
+            # manual retry, FDH, or another cleanup pass). The DB row is now
+            # orphaned. Delete it so it does not keep firing detection.
+            log(
+                f"INFO  [{app}] no queue match for '{torrent['name']}' "
+                f"({torrent['reason']}) -- orphaned DB row, deleting"
+            )
+            delete_rdt_torrent(db_path, torrent["id"], dry_run)
+            cleaned_rdt.add(torrent["id"])
 
 
 # ---------------------------------------------------------------------------
