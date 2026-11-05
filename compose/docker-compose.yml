@@ -223,10 +223,11 @@ services:
     env_file:
       - ${RDT_BLOCKLIST_ENV:-./rdt-blocklist.env}
     volumes:
-      # Mount the rdt-client named volume read-only to access the live DB.
-      # The DB lives in the Docker volume, not on NFS — NFS has WAL sync issues
-      # that cause the DB copy to appear nearly empty when rdt-client is running.
-      - rdt-client-config:/data/db:ro
+      # Mount the rdt-client named volume to access and clean up the live DB.
+      # Needs write access to delete orphaned/stuck torrent rows.
+      # The DB lives in the Docker volume, not on NFS -- NFS has WAL sync
+      # issues that cause the DB copy to appear nearly empty while rdt-client runs.
+      - rdt-client-config:/data/db
     depends_on:
       - rdt-client
       - sonarr
