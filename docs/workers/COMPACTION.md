@@ -75,5 +75,7 @@ Never log, print, or commit values from `~/.env`.
 
 ## Active Workers
 
-See `docs/workers/state.md` for current status of all workers.
-See `docs/workers/README.md` for how the system works.
+**Worker 9 — TorBox Migration** is the next job to execute.
+Opening prompt is in `docs/workers/worker-9-torbox.md`.
+3-phase migration with compaction checkpoints between each phase.
+Phase compaction prompts are embedded in the worker file itself.

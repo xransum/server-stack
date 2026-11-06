@@ -153,6 +153,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
 | Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
 | Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; pipeline verified; manual epub drop → books/ready works |
+| Worker 9 — TorBox Migration | ⏳ pending | Replace rdt-client with TorBoxarr; 3-phase migration with compaction checkpoints |
 
 ---
 

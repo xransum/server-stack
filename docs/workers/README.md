@@ -22,12 +22,15 @@ If you accidentally commit a secret, stop immediately and tell the user before p
 
 | Worker | Job | Status | Trigger |
 |---|---|---|---|
-| [Worker 1](worker-1-gpu.md) | PCIe passthrough + NVIDIA drivers + Plex NVENC | ⏳ pending | RTX 2070 physically in Proxmox machine |
+| [Worker 1](worker-1-gpu.md) | PCIe passthrough + NVIDIA drivers + Plex NVENC | ✅ completed | — |
 | [Worker 2](worker-2-decommission.md) | Decommission serverhub | ✅ completed | — |
-| [Worker 3](worker-3-gameservers.md) | Create gameservers-vm + Pelican Panel | ⏳ pending | Anytime (independent) |
-| [Worker 4](worker-4-devboxes.md) | Create devbox-template VM | ⏳ pending | Anytime (independent) |
-| [Worker 5](worker-5-portainer.md) | Portainer CE Docker management UI | ⏳ pending | Anytime (independent) |
-| [Worker 6](worker-6-seerr.md) | Migrate Overseerr → Seerr | ⏳ pending | Anytime (independent) |
+| [Worker 3](worker-3-gameservers.md) | Create gameservers-vm + Pelican Panel | ✅ completed | — |
+| [Worker 4](worker-4-devboxes.md) | Create devbox-template VM | ✅ completed | — |
+| [Worker 5](worker-5-portainer.md) | Portainer CE Docker management UI | ✅ completed | — |
+| [Worker 6](worker-6-seerr.md) | Migrate Overseerr → Seerr | ✅ completed | — |
+| [Worker 7](worker-7-edge-vm.md) | edge-vm ingress migration | ✅ completed | — |
+| [Worker 8](worker-8-shelfmark.md) | Shelfmark pipeline | ✅ completed | — |
+| [Worker 9](worker-9-torbox.md) | Migrate rdt-client → TorBoxarr (TorBox) | ⏳ pending | Anytime (independent) |
 
 ## Parent session
 
