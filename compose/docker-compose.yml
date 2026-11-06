@@ -228,6 +228,9 @@ services:
       # The DB lives in the Docker volume, not on NFS -- NFS has WAL sync
       # issues that cause the DB copy to appear nearly empty while rdt-client runs.
       - rdt-client-config:/data/db
+      # Docker socket so rdt-blocklist can stop/start rdt-client to release
+      # the WAL lock before deleting stuck torrent rows from the DB.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - rdt-client
       - sonarr

@@ -211,32 +211,74 @@ def get_stuck_torrents(
     return stuck
 
 
-def delete_rdt_torrent(db_path: str, torrent_id: str, dry_run: bool) -> None:
-    if dry_run:
-        log(f"DRY   [rdt] would delete torrent {torrent_id}")
+def _docker_container_action(container_name: str, action: str) -> bool:
+    """
+    Stop or start a Docker container via the Unix socket.
+    action: 'stop' or 'start'
+    Returns True on success.
+    """
+    import socket as _socket
+    sock_path = "/var/run/docker.sock"
+    if not os.path.exists(sock_path):
+        return False
+    try:
+        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        sock.settimeout(15)
+        sock.connect(sock_path)
+        path = f"/containers/{container_name}/{action}"
+        req = f"POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        sock.sendall(req.encode())
+        resp = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            resp += chunk
+        sock.close()
+        status_line = resp.decode("utf-8", errors="replace").split("\r\n")[0]
+        code = int(status_line.split(" ")[1]) if len(status_line.split(" ")) > 1 else 0
+        return 200 <= code < 300 or code == 204
+    except Exception as e:
+        log(f"WARN  [rdt] docker {action} {container_name!r} failed: {e}")
+        return False
+
+
+def delete_rdt_torrents(db_path: str, torrent_ids: list[str], dry_run: bool) -> None:
+    """Delete multiple torrent rows in one stop/start cycle."""
+    if not torrent_ids:
         return
-    # Use isolation_level=None (autocommit) + exclusive locking mode to force
-    # WAL checkpoint. rdt-client holds a WAL reader connection so we retry with
-    # a generous timeout and checkpoint before committing to ensure the delete
-    # actually persists rather than being rolled back by rdt-client's connection.
-    for attempt in range(3):
-        try:
-            con = sqlite3.connect(db_path, timeout=15, isolation_level=None)
-            con.execute("PRAGMA locking_mode=EXCLUSIVE")
-            con.execute("PRAGMA journal_mode=WAL")
-            con.execute("BEGIN EXCLUSIVE")
-            con.execute("DELETE FROM Downloads WHERE TorrentId=?", (torrent_id,))
-            con.execute("DELETE FROM Torrents WHERE TorrentId=?", (torrent_id,))
-            con.execute("COMMIT")
-            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            con.close()
-            log(f"INFO  [rdt] deleted stuck torrent {torrent_id}")
-            return
-        except Exception as e:
-            log(f"WARN  [rdt] delete attempt {attempt+1}/3 for {torrent_id}: {e}")
-            if attempt < 2:
-                import time; time.sleep(3)
-    log(f"ERROR [rdt] failed to delete torrent {torrent_id} after 3 attempts -- rdt-client may need a restart to release the WAL lock")
+    if dry_run:
+        for tid in torrent_ids:
+            log(f"DRY   [rdt] would delete torrent {tid}")
+        return
+
+    container = "rdt-client"
+    stopped = _docker_container_action(container, "stop")
+    if stopped:
+        log(f"INFO  [rdt] stopped {container} to release WAL lock")
+        import time; time.sleep(2)
+    else:
+        log(f"WARN  [rdt] could not stop {container} via Docker socket -- attempting delete anyway")
+
+    try:
+        con = sqlite3.connect(db_path, timeout=10)
+        for tid in torrent_ids:
+            con.execute("DELETE FROM Downloads WHERE TorrentId=?", (tid,))
+            con.execute("DELETE FROM Torrents WHERE TorrentId=?", (tid,))
+            log(f"INFO  [rdt] deleted stuck torrent {tid}")
+        con.commit()
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        con.close()
+    except Exception as e:
+        log(f"ERROR [rdt] failed to delete torrents: {e}")
+    finally:
+        if stopped:
+            import time; time.sleep(1)
+            restarted = _docker_container_action(container, "start")
+            if restarted:
+                log(f"INFO  [rdt] restarted {container}")
+            else:
+                log(f"ERROR [rdt] failed to restart {container} -- manual restart required")
 
 
 # ---------------------------------------------------------------------------
@@ -360,12 +402,15 @@ def process_app(
     base_url: str,
     api_key: str,
     stuck: list[dict],
-    db_path: str,
     dry_run: bool,
-) -> None:
+) -> set[str]:
+    """
+    Match stuck torrents against the *arr queue, blocklist matches, trigger
+    re-searches. Returns set of RDT TorrentIds that should be deleted from DB.
+    """
     if not base_url or not api_key:
         log(f"INFO  [{app}] not configured, skipping")
-        return
+        return set()
 
     base_url = base_url.rstrip("/")
     id_field = "episodeIds" if app.lower() == "sonarr" else "movieIds"
@@ -373,11 +418,9 @@ def process_app(
 
     queue = get_queue(base_url, api_key, app)
     if not queue:
-        return
+        return set()
 
-    # Track which RDT torrents we've already cleaned up this pass to avoid
-    # double-deleting if multiple queue entries match the same torrent.
-    cleaned_rdt: set[str] = set()
+    to_delete: set[str] = set()
 
     for torrent in stuck:
         matched = False
@@ -403,21 +446,17 @@ def process_app(
             if blocklist_queue_item(base_url, api_key, queue_id, app, dry_run):
                 if media_id:
                     trigger_search(base_url, api_key, id_field, media_id, app, dry_run)
-                if torrent["id"] not in cleaned_rdt:
-                    delete_rdt_torrent(db_path, torrent["id"], dry_run)
-                    cleaned_rdt.add(torrent["id"])
-            break  # matched -- move on to next stuck torrent
+                to_delete.add(torrent["id"])
+            break
 
-        if not matched and torrent["id"] not in cleaned_rdt:
-            # No queue entry found -- Sonarr/Radarr already removed it (e.g.
-            # manual retry, FDH, or another cleanup pass). The DB row is now
-            # orphaned. Delete it so it does not keep firing detection.
+        if not matched:
             log(
                 f"INFO  [{app}] no queue match for '{torrent['name']}' "
-                f"({torrent['reason']}) -- orphaned DB row, deleting"
+                f"({torrent['reason']}) -- orphaned DB row, will delete"
             )
-            delete_rdt_torrent(db_path, torrent["id"], dry_run)
-            cleaned_rdt.add(torrent["id"])
+            to_delete.add(torrent["id"])
+
+    return to_delete
 
 
 # ---------------------------------------------------------------------------
@@ -449,22 +488,28 @@ def run_once(config: dict) -> None:
     for t in stuck:
         log(f"DEBUG   TorrentId={t['id']} name={t['name']!r} reason={t['reason']!r}")
 
-    process_app(
+    # Collect torrent IDs to delete across all *arr instances.
+    # Union so each ID is deleted once regardless of how many apps matched it.
+    to_delete: set[str] = set()
+
+    to_delete |= process_app(
         "sonarr",
         config.get("sonarr_url", ""),
         config.get("sonarr_api_key", ""),
         stuck,
-        db_path,
         dry_run,
     )
-    process_app(
+    to_delete |= process_app(
         "radarr",
         config.get("radarr_url", ""),
         config.get("radarr_api_key", ""),
         stuck,
-        db_path,
         dry_run,
     )
+
+    # One stop/start cycle for all DB deletes
+    if to_delete:
+        delete_rdt_torrents(db_path, list(to_delete), dry_run)
 
 
 def main() -> int:
