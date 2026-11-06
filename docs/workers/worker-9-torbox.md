@@ -1,7 +1,7 @@
 # Worker 9 -- TorBox Migration (rdt-client replacement)
 
 ## Status
-⏳ pending
+✅ completed
 
 ## Trigger
 Independent -- anytime. RDT infringing file rejections have become severe enough
@@ -546,4 +546,50 @@ so rollback is always available until that point.
 
 ## Completion Notes
 
-(fill in when done)
+**Completed: 2026-11-06**
+
+### What was done
+
+**Phase 1 — Parallel setup**
+- TorBoxarr cloned to `/opt/media/torboxarr` on media-vm (commit `72343d0cb9478b57c7bdb879ee34962522842b08`, v1.0.5)
+- Image built as `server-stack/torboxarr:local`
+- Added to `compose/docker-compose.yml` under indexers profile
+- Added to Radarr as priority 1 download client (rdt-client bumped to priority 2)
+- End-to-end verified with Pineapple Express (2008): grabbed → TorBox downloaded → Radarr imported ✅
+
+**Phase 2 — Cutover**
+- Added TorBoxarr to Sonarr (priority 1, category `sonarr`)
+- Disabled rdt-client in both Sonarr and Radarr (not deleted -- rollback kept)
+- Cleared 24 stale rdt-client queue items from Sonarr with blocklist=true (triggers re-search)
+- Confirmed new grabs routing through TorBoxarr (Stick S02E01/E02 grabbed immediately)
+
+**Phase 3 — Cleanup**
+- Wrote `scripts/torbox-blocklist.py`: polls TorBox for stalled/error torrents, blocklists in *arr, deletes from cloud; also cleans up completed cloud tasks after import (Mode B -- workaround for PR #8 not merged)
+- Added `docker/torbox-blocklist/Dockerfile` and `docker/torbox-blocklist/example.env`
+- Added torbox-blocklist service to compose (indexers profile)
+- Moved rdt-client and rdt-blocklist to `rdt-legacy` profile (not started, retained for rollback reference)
+- torbox-blocklist running live (DRY_RUN=false) on media-vm
+- rdt-client container stopped manually
+- state.md updated
+
+### Key config details
+
+- TorBoxarr API key env var: `TORBOXARR_TORBOX_API_TOKEN` (NOT `TORBOX_API_KEY` -- the worker doc was wrong; check TorBoxarr source for the actual var name)
+- TorBoxarr also requires `TORBOXARR_SAB_API_KEY` even if not using SABnzbd -- set to any dummy value (e.g. `torboxarr-sab-unused`)
+- TorBoxarr qBit password: `torboxarr` (set via `TORBOXARR_QBIT_PASSWORD`)
+- Completed files: `/mnt/media/downloads/completed/<category>/` (not the rdt-client layout)
+- Hardlinks: impossible between `/mnt/media/downloads` and `/mnt/media/movies|tv` -- they are on different NFS mount points (device IDs 48 vs 53). Radarr/Sonarr fall back to copy+delete, which works fine.
+- torbox-blocklist User-Agent: must send `Mozilla/5.0` -- TorBox's CDN (Cloudflare) blocks `Python-urllib/3.x` with HTTP 403
+
+### Rollback path (if needed)
+
+1. Re-enable rdt-client in Sonarr/Radarr Settings → Download Clients
+2. Set rdt-client priority to 1
+3. `docker start rdt-client`
+4. `docker stop torboxarr torbox-blocklist`
+5. The `rdt-client-config` volume and rdt-legacy compose profile are still present
+
+### What was NOT done (deferred)
+
+- File extension filtering (`.exe`, `.sh`, `.bash`, `.torrent` files in download dirs) -- was scoped to Phase 3 originally but no actual security incident has occurred. Defer until there is evidence of a problem.
+- Deleting the `rdt-client-config` Docker volume -- kept for rollback. Delete manually once confident: `docker volume rm server-stack_rdt-client-config`

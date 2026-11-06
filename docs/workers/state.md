@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-10-21 (Worker 8 complete — Shelfmark pipeline live, DCC Books 1-8 in Calibre)
+Last updated: 2026-11-06 (Worker 9 complete — TorBox migration done, rdt-client decommissioned)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -51,9 +51,11 @@ Profiles active: `media`, `indexers`, `cloudflare-bypass`
 | sonarr | ✅ | Root: /mnt/media/tv |
 | radarr | ✅ | Root: /mnt/media/movies, collections fixed |
 | prowlarr | ✅ | Indexers synced, TPB working, 1337x disabled (upstream Byparr issue) |
-| rdt-client | ✅ | Using NAS DB, FinishedAction=2 (deletes local files after import) |
+| torboxarr | ✅ | Priority 1 download client in Sonarr + Radarr; TorBox debrid; built from source at /opt/media/torboxarr |
+| torbox-blocklist | ✅ | DRY_RUN=false; polls TorBox every 2min; handles stuck + cloud cleanup |
+| rdt-client | 🚫 stopped | Replaced by TorBoxarr; container stopped, volume retained for rollback |
 | queue-cleaner | ✅ | DRY_RUN=false, new API keys |
-| rdt-blocklist | ✅ | DRY_RUN=false, new API keys |
+| rdt-blocklist | 🚫 stopped | Replaced by torbox-blocklist; config kept in rdt-legacy profile |
 | scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
 | shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; Real-Debrid native client; calibre-web poller imports from books/ready |
@@ -61,17 +63,17 @@ Profiles active: `media`, `indexers`, `cloudflare-bypass`
 
 Known issues (cosmetic, not blocking):
 - Sonarr/Radarr indexer backoff warnings (auto-recover)
-- Sonarr/Radarr Docker path warning for rdt-client (path mapping set, cosmetic)
+- Hardlinks not possible between /mnt/media/downloads and /mnt/media/movies|tv (separate NFS mounts, different device IDs) — Radarr/Sonarr fall back to copy+delete, which is fine
 
 ---
 
 ## DNS — xransum.com
 
 ### CF Tunnel (orange cloud) → NPM → container
-overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm
+overseerr, sonarr, radarr, prowlarr, tautulli, calibre, npm
 
 ### CF Tunnel (orange cloud) → NPM → backend
-overseerr, sonarr, radarr, prowlarr, tautulli, rdt, calibre, npm, shelfmark,
+overseerr, sonarr, radarr, prowlarr, tautulli, calibre, npm, shelfmark,
 pelican (→ Pelican Panel on gameservers-vm:80),
 gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 
@@ -153,7 +155,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 6 — Seerr Migration | ✅ completed | Seerr 3.5.0 live at overseerr.xransum.com, data intact |
 | Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
 | Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; pipeline verified; manual epub drop → books/ready works |
-| Worker 9 — TorBox Migration | ⏳ pending | Replace rdt-client with TorBoxarr; 3-phase migration with compaction checkpoints |
+| Worker 9 — TorBox Migration | ✅ completed | TorBoxarr + torbox-blocklist live; rdt-client stopped; end-to-end verified |
 
 ---
 
