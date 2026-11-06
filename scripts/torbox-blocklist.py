@@ -112,6 +112,8 @@ def http_json(
 ) -> tuple[int, object]:
     req = urllib.request.Request(url, data=body, method=method)
     req.add_header("Accept", "application/json")
+    # TorBox's CDN (Cloudflare) blocks the default Python-urllib user agent.
+    req.add_header("User-Agent", "Mozilla/5.0")
     if headers:
         for k, v in headers.items():
             req.add_header(k, v)
