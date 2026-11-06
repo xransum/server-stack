@@ -139,7 +139,7 @@ def http_json(
 # ---------------------------------------------------------------------------
 
 TORBOX_BASE = "https://api.torbox.app/v1/api"
-STUCK_STATUSES = {"stalled", "error"}
+STUCK_STATUSES = {"stalled (no seeds)", "error"}
 DONE_STATUSES = {"completed", "cached", "seeding", "uploading", "paused"}
 
 
@@ -384,6 +384,7 @@ def run_once(config: dict) -> None:
     dry_run = config["dry_run"]
     stuck_minutes = config["stuck_minutes"]
     cleanup_minutes = config["completed_cleanup_minutes"]
+    zero_seed_check = config.get("zero_seed_check", True)
 
     torrents = torbox_list(api_key)
     if not torrents:
@@ -401,12 +402,28 @@ def run_once(config: dict) -> None:
         created_at = t.get("created_at") or t.get("updated_at")
         created_dt = parse_dt(created_at)
         age_min = (now - created_dt).total_seconds() / 60.0 if created_dt else 0
+        seeds = t.get("seeds")
 
-        if status in STUCK_STATUSES and age_min >= stuck_minutes:
+        # A torrent is stuck if it is in a known stuck state long enough,
+        # OR if it is nominally "downloading" but has 0 seeders — with 0
+        # seeders there is no data source and progress is impossible.
+        zero_seed_stuck = (
+            zero_seed_check
+            and status == "downloading"
+            and isinstance(seeds, int)
+            and seeds == 0
+            and age_min >= stuck_minutes
+        )
+
+        if (status in STUCK_STATUSES and age_min >= stuck_minutes) or zero_seed_stuck:
+            if zero_seed_stuck:
+                reason = f"status={status!r} seeds=0 age={age_min:.0f}m >= {stuck_minutes}m (zero-seed)"
+            else:
+                reason = f"status={status!r} age={age_min:.0f}m >= {stuck_minutes}m"
             stuck.append({
                 "id": tb_id,
                 "name": name,
-                "reason": f"status={status!r} age={age_min:.0f}m >= {stuck_minutes}m",
+                "reason": reason,
             })
         elif status in DONE_STATUSES and age_min >= cleanup_minutes:
             done.append({
@@ -445,6 +462,7 @@ def main() -> int:
         "completed_cleanup_minutes": env_int("COMPLETED_CLEANUP_MINUTES", 60),
         "dry_run": env_bool("DRY_RUN", True),
         "poll_interval": env_int("POLL_INTERVAL_SECONDS", 120),
+        "zero_seed_check": env_bool("ZERO_SEED_CHECK", True),
     }
 
     if not config["torbox_api_key"]:
@@ -459,6 +477,7 @@ def main() -> int:
         f"one_shot={one_shot} "
         f"poll_interval={config['poll_interval']}s "
         f"stuck_minutes={config['stuck_minutes']} "
+        f"zero_seed_check={config['zero_seed_check']} "
         f"completed_cleanup_minutes={config['completed_cleanup_minutes']}"
     )
 

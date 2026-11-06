@@ -9,6 +9,32 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-11-06 — torbox-blocklist: stalled-status fix + zero-seeder check
+
+**Context:** Observed a torrent (`Breaking.Bad.S04E12.HDTV.VOSTFR.Gillop.avi`) stuck
+indefinitely in TorBox with `download_state: "stalled (no seeds)"` and `seeds: 0`,
+`peers: 2`. It was not being caught by `torbox-blocklist.py` Mode A.
+
+**Root cause — stalled status match bug:** `STUCK_STATUSES` was `{"stalled", "error"}`.
+The live TorBox API (confirmed via OpenAPI docs and live response) uses the exact string
+`"stalled (no seeds)"` — never bare `"stalled"`. Set membership check failed silently.
+Fixed by replacing `"stalled"` with `"stalled (no seeds)"` in `STUCK_STATUSES`.
+
+**Decision — zero-seeder downloading check:** Added a second trigger: if a torrent is
+in `"downloading"` state with `seeds == 0` after `STUCK_MINUTES`, treat it as stuck.
+Rationale: in BitTorrent, seeders are the only source of complete file data. Peers
+(leechers) can only share pieces they received from seeders — 0 seeders means no data
+source exists regardless of peer count, and progress is impossible. Confirmed via live
+API: `seeds` field is present on every torrent object in `GET /torrents/mylist`.
+New env var `ZERO_SEED_CHECK` (default `true`) allows disabling if needed.
+
+**Deferred:** No separate timeout for zero-seeder downloading vs. hard-stalled torrents
+— both use `STUCK_MINUTES` (default 5). Even 1 seeder at debrid speeds is insufficient
+for reliable download; a torrent that has been at 0 seeds for 5 minutes is effectively
+dead.
+
+---
+
 ## 2026-10-21 — Worker 8: Shelfmark ebook pipeline
 
 **Context:** Deploy Shelfmark (on-demand ebook search/grab) on media-vm, expose at
