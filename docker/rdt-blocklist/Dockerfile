@@ -6,8 +6,7 @@ WORKDIR /app
 # Build context should be repo root: docker build -f docker/rdt-blocklist/Dockerfile .
 COPY scripts/rdt-blocklist.py .
 
-# Needs read access to the rdt-client database on the host.
-# Run as UID 1000 to match the rdt-client service user (PUID=1000).
-USER 1000
+# Runs as root to access the Docker socket (/var/run/docker.sock) for
+# stopping/starting rdt-client before DB writes to release the WAL lock.
 
 ENTRYPOINT ["python", "-u", "/app/rdt-blocklist.py"]
