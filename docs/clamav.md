@@ -192,6 +192,6 @@ clamscan -r /mnt/raid0/media/Videos/Movies
 
 ## Notes
 
-- Junk files like `.nfo`, `.jpg`, `.txt`, `.exe` should be excluded at the rdt-client level via its file exclusion regex (see [rdt-client](rdt-client.md#exclude-junk-files)) so they never get downloaded in the first place
+- Junk files like `.nfo`, `.jpg`, `.txt`, `.exe` arrive alongside the main file in the completed download directory. TorBoxarr does not filter them — they get imported alongside the media file and can be cleaned up manually or via a post-import script if needed
 - ClamAV's virus database is primarily focused on Windows malware and common threats. It is not a substitute for OS-level security, but it catches the obvious cases
 - The `freshclam` daemon updates signatures automatically. No cron job is needed.

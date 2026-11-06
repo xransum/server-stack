@@ -100,9 +100,9 @@ Status legend: **active** = migrate it; **deprecated** = do not migrate, retire;
 | Sonarr | active | TV automation |
 | Radarr | active | movie automation |
 | Prowlarr | active | indexer manager |
-| rdt-client | active | Real-Debrid torrent client |
+| torboxarr | active | TorBox debrid download client |
+| torbox-blocklist | active | custom sidecar, auto-blocklists stalled/error TorBox tasks |
 | queue-cleaner | active | custom script, stalled/failed queue cleanup |
-| rdt-blocklist | active | custom sidecar, auto-blocklists infringing releases |
 
 **Cloudflare bypass** (media-vm)
 

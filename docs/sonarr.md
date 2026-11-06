@@ -5,7 +5,7 @@
 > media-vm, Sonarr runs as a container with config in a named Docker volume and
 > media at `/mnt/media/tv` (NFS mount from TrueNAS). See `compose/docker-compose.yml`.
 
-TV show management and automation. Sonarr monitors for new episodes, searches indexers via Prowlarr, sends torrents to rdt-client, and imports completed downloads into your media library.
+TV show management and automation. Sonarr monitors for new episodes, searches indexers via Prowlarr, sends torrents to TorBoxarr, and imports completed downloads into your media library.
 
 - **Port**: 8989
 - **Runs as**: `media` system user
@@ -54,9 +54,9 @@ Open `http://localhost:8989` in your browser.
 ### Download Client
 
 - Settings -> Download Clients -> Add -> qBittorrent
-  - Host: `localhost`
-  - Port: `6500`
-  - Username/Password: your rdt-client credentials
+  - Host: `torboxarr` (container name) or `localhost` if running natively
+  - Port: `8085`
+  - Password: `torboxarr` (set via `TORBOXARR_QBIT_PASSWORD`)
   - Category: `sonarr`
   - Test and Save
 

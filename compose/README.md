@@ -21,7 +21,7 @@ Docker Compose stack for `media-vm` and `gameservers-vm` on Proxmox.
 | Profile | Services |
 |---|---|
 | `media` | Plex, Tautulli, Seerr (formerly Overseerr), Calibre-Web, Portainer |
-| `indexers` | Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist |
+| `indexers` | Sonarr, Radarr, Prowlarr, torboxarr, torbox-blocklist, queue-cleaner |
 | `cloudflare-bypass` | Byparr, byparr-unwrap, byparr-proxy-1337x, byparr-proxy-apibay |
 | `s3` | Reserved (MinIO runs natively on TrueNAS — no active services) |
 | `infra` | dns-updater (deprecated — CF Tunnel replaces this) |
@@ -74,7 +74,7 @@ cp definitions/*.yml compose/custom-definitions/
 | Prowlarr | http://192.168.1.169:9696 |
 | Seerr (fka Overseerr) | http://192.168.1.169:5055 |
 | Tautulli | http://192.168.1.169:8181 |
-| rdt-client | http://192.168.1.169:6500 |
+| TorBoxarr | http://192.168.1.169:8085 |
 | Calibre-Web | http://192.168.1.169:8083 |
 | Portainer | https://192.168.1.169:9443 |
 | NPM admin (edge-vm) | http://192.168.1.173:81 |

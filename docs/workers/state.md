@@ -58,7 +58,7 @@ Profiles active: `media`, `indexers`, `cloudflare-bypass`
 | rdt-blocklist | 🚫 stopped | Replaced by torbox-blocklist; config kept in rdt-legacy profile |
 | scan-media | ✅ | ClamAV + Discord notifications on import (Worker 2 added this) |
 | byparr + proxies | ✅ | TPB working, 1337x disabled |
-| shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; Real-Debrid native client; calibre-web poller imports from books/ready |
+| shelfmark | ✅ | Port 8084, shelfmark.xransum.com, profile indexers; calibre-web poller imports from books/ready |
 | portainer | ✅ | docker.xransum.com, Tailscale-only, Let's Encrypt cert via DNS-01 |
 
 Known issues (cosmetic, not blocking):

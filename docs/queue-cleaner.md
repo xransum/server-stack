@@ -15,12 +15,12 @@ pipeline indefinitely.
 Sonarr and Radarr have built-in cleanup (Failed Download Handling, decluttarr)
 but three specific failure modes slip through and leave items stuck forever:
 
-### Mode 1 — rdt-client zero-size stall
+### Mode 1 — download client zero-size stall
 
-Real-Debrid rejects an infringing torrent hash; rdt-client returns a 500;
-Sonarr/Radarr park the item with `status=warning, size=0, sizeleft=0`.
-Neither `remove_failed_downloads` (only acts on `status=failed`) nor
-`remove_stalled` (wrong error string) catches this. A real example:
+The download client reports an error; Sonarr/Radarr park the item with
+`status=warning, size=0, sizeleft=0`. Neither `remove_failed_downloads`
+(only acts on `status=failed`) nor `remove_stalled` (wrong error string)
+catches this. A real example:
 
 ```json
 {
