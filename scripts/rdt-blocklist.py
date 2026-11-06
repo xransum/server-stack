@@ -215,15 +215,28 @@ def delete_rdt_torrent(db_path: str, torrent_id: str, dry_run: bool) -> None:
     if dry_run:
         log(f"DRY   [rdt] would delete torrent {torrent_id}")
         return
-    try:
-        con = sqlite3.connect(db_path)
-        con.execute("DELETE FROM Downloads WHERE TorrentId=?", (torrent_id,))
-        con.execute("DELETE FROM Torrents WHERE TorrentId=?", (torrent_id,))
-        con.commit()
-        con.close()
-        log(f"INFO  [rdt] deleted stuck torrent {torrent_id}")
-    except Exception as e:
-        log(f"ERROR [rdt] failed to delete torrent {torrent_id}: {e}")
+    # Use isolation_level=None (autocommit) + exclusive locking mode to force
+    # WAL checkpoint. rdt-client holds a WAL reader connection so we retry with
+    # a generous timeout and checkpoint before committing to ensure the delete
+    # actually persists rather than being rolled back by rdt-client's connection.
+    for attempt in range(3):
+        try:
+            con = sqlite3.connect(db_path, timeout=15, isolation_level=None)
+            con.execute("PRAGMA locking_mode=EXCLUSIVE")
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("BEGIN EXCLUSIVE")
+            con.execute("DELETE FROM Downloads WHERE TorrentId=?", (torrent_id,))
+            con.execute("DELETE FROM Torrents WHERE TorrentId=?", (torrent_id,))
+            con.execute("COMMIT")
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            con.close()
+            log(f"INFO  [rdt] deleted stuck torrent {torrent_id}")
+            return
+        except Exception as e:
+            log(f"WARN  [rdt] delete attempt {attempt+1}/3 for {torrent_id}: {e}")
+            if attempt < 2:
+                import time; time.sleep(3)
+    log(f"ERROR [rdt] failed to delete torrent {torrent_id} after 3 attempts -- rdt-client may need a restart to release the WAL lock")
 
 
 # ---------------------------------------------------------------------------
