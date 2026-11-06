@@ -166,7 +166,7 @@ def torbox_delete(api_key: str, torrent_id: int, dry_run: bool) -> bool:
     url = f"{TORBOX_BASE}/torrents/controltorrent"
     body = json.dumps({"torrent_id": torrent_id, "operation": "delete"}).encode()
     status, data = http_json(
-        "DELETE", url,
+        "POST", url,
         headers={"Authorization": f"Bearer {api_key}"},
         body=body,
     )
