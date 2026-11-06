@@ -521,7 +521,7 @@ def main() -> int:
         "radarr_api_key": os.environ.get("RADARR_API_KEY", "").strip(),
         "error_patterns": env_list("ERROR_PATTERNS", DEFAULT_ERROR_PATTERNS),
         "stuck_statuses": env_list("STUCK_PROCESSING_STATUSES", DEFAULT_STUCK_STATUSES),
-        "stuck_processing_minutes": env_int("STUCK_PROCESSING_MINUTES", 120),
+        "stuck_processing_minutes": env_int("STUCK_PROCESSING_MINUTES", 5),
         "dry_run": env_bool("DRY_RUN", True),
         "poll_interval": env_int("POLL_INTERVAL_SECONDS", 120),
     }
