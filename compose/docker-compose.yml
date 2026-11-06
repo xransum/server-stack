@@ -9,7 +9,7 @@
 #
 # Profiles:
 #   media              Plex, Tautulli, Seerr (formerly Overseerr), Calibre-Web
-#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, torboxarr, queue-cleaner, rdt-blocklist
+#   indexers           Sonarr, Radarr, Prowlarr, torboxarr, torbox-blocklist, queue-cleaner
 #   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
 #   s3                 Reserved profile (MinIO runs natively on TrueNAS)
 #   infra              dns-updater (deprecated — CF Tunnel replaces this)
@@ -182,19 +182,6 @@ services:
     ports:
       - "9696:9696"
 
-  rdt-client:
-    <<: *restart-policy
-    image: rogerfar/rdtclient:latest
-    profiles: [indexers]
-    container_name: rdt-client
-    environment:
-      <<: *puid-pgid
-    volumes:
-      - rdt-client-config:/data/db
-      - /mnt/media/downloads:/mnt/media/downloads
-    ports:
-      - "6500:6500"
-
   torboxarr:
     <<: *restart-policy
     image: server-stack/torboxarr:local
@@ -210,6 +197,20 @@ services:
       - torboxarr-config:/config
     ports:
       - "8085:8085"
+    depends_on:
+      - sonarr
+      - radarr
+
+  torbox-blocklist:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/torbox-blocklist/Dockerfile
+    image: server-stack/torbox-blocklist:local
+    profiles: [indexers]
+    container_name: torbox-blocklist
+    env_file:
+      - ${TORBOX_BLOCKLIST_ENV:-./torbox-blocklist.env}
     depends_on:
       - sonarr
       - radarr
@@ -232,26 +233,23 @@ services:
       - radarr
 
   rdt-blocklist:
+    # DEPRECATED: rdt-client and rdt-blocklist have been replaced by TorBoxarr
+    # and torbox-blocklist as of 2026-11-06. These service blocks are kept as
+    # historical reference but are NOT started (profile removed). Remove entirely
+    # once confident in the TorBox migration.
     <<: *restart-policy
     build:
       context: ..
       dockerfile: docker/rdt-blocklist/Dockerfile
     image: server-stack/rdt-blocklist:local
-    profiles: [indexers]
+    profiles: [rdt-legacy]
     container_name: rdt-blocklist
     env_file:
       - ${RDT_BLOCKLIST_ENV:-./rdt-blocklist.env}
     volumes:
-      # Mount the rdt-client named volume to access and clean up the live DB.
-      # Needs write access to delete orphaned/stuck torrent rows.
-      # The DB lives in the Docker volume, not on NFS -- NFS has WAL sync
-      # issues that cause the DB copy to appear nearly empty while rdt-client runs.
       - rdt-client-config:/data/db
-      # Docker socket so rdt-blocklist can stop/start rdt-client to release
-      # the WAL lock before deleting stuck torrent rows from the DB.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
-      - rdt-client
       - sonarr
       - radarr
 
@@ -291,7 +289,7 @@ services:
       CUSTOM_SCRIPT_JSON_PAYLOAD: "true"
     volumes:
       - shelfmark-config:/config
-      # Downloads mount must match rdt-client's exactly for path resolution
+      # Downloads mount must match the download client's path exactly for path resolution
       - /mnt/media/downloads:/mnt/media/downloads
       # Post-process hook: scans via scan-media, moves clean files to books/ready
       - ../scripts/shelfmark-post-process.py:/scripts/post_process.py:ro
@@ -301,7 +299,7 @@ services:
       - "8084:8084"
     depends_on:
       - prowlarr
-      - rdt-client
+      - torboxarr
       - scan-media
 
   # ---------------------------------------------------------------------------
