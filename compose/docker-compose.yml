@@ -9,7 +9,7 @@
 #
 # Profiles:
 #   media              Plex, Tautulli, Seerr (formerly Overseerr), Calibre-Web
-#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, queue-cleaner, rdt-blocklist
+#   indexers           Sonarr, Radarr, Prowlarr, rdt-client, torboxarr, queue-cleaner, rdt-blocklist
 #   cloudflare-bypass  Byparr, byparr-unwrap, byparr-proxy instances
 #   s3                 Reserved profile (MinIO runs natively on TrueNAS)
 #   infra              dns-updater (deprecated — CF Tunnel replaces this)
@@ -194,6 +194,25 @@ services:
       - /mnt/media/downloads:/mnt/media/downloads
     ports:
       - "6500:6500"
+
+  torboxarr:
+    <<: *restart-policy
+    image: server-stack/torboxarr:local
+    profiles: [indexers]
+    container_name: torboxarr
+    env_file:
+      - ${TORBOXARR_ENV:-./torboxarr.env}
+    volumes:
+      # Downloads mount: TorBoxarr stages and completes files here.
+      # completed/<category>/ subdirs map to Sonarr/Radarr categories.
+      - /mnt/media/downloads:/mnt/media/downloads
+      # Persist TorBoxarr SQLite DB and checkpoint state across restarts.
+      - torboxarr-config:/config
+    ports:
+      - "8085:8085"
+    depends_on:
+      - sonarr
+      - radarr
 
   queue-cleaner:
     <<: *restart-policy
@@ -410,6 +429,7 @@ volumes:
   radarr-config:
   prowlarr-config:
   rdt-client-config:
+  torboxarr-config:
   # ClamAV virus definition database — persisted to avoid re-downloading on restart
   clamav-db:
   portainer-data:
