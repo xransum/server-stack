@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -233,7 +234,7 @@ def delete_rdt_torrent(db_path: str, torrent_id: str, dry_run: bool) -> None:
 def get_queue(base_url: str, api_key: str, app: str) -> list[dict]:
     url = (
         f"{base_url}/api/v3/queue"
-        "?pageSize=100&includeUnknownSeriesItems=true&includeUnknownMovieItems=true"
+        "?pageSize=200&includeUnknownSeriesItems=true&includeUnknownMovieItems=true"
     )
     status, data = http_json("GET", url, api_key)
     if status != 200:
@@ -249,6 +250,47 @@ def names_match(rdt_name: str, queue_title: str) -> bool:
     a = rdt_name.lower()
     b = queue_title.lower()
     return a in b or b in a
+
+
+_SXXEXX_RE = re.compile(r"[Ss](\d{1,2})[Xx Ee._-]?[Ee]?(\d{1,2})")
+
+
+def _extract_sxxexx(title: str) -> str | None:
+    """Extract normalised SxxExx from a title, e.g. 'S02E01'."""
+    m = _SXXEXX_RE.search(title)
+    if not m:
+        return None
+    return f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}"
+
+
+def _series_slug(title: str) -> str:
+    """Lowercase alphanum prefix before the first SxxExx pattern."""
+    m = _SXXEXX_RE.search(title)
+    if not m:
+        return re.sub(r"[^a-z0-9]", "", title.lower())
+    return re.sub(r"[^a-z0-9]", "", title[:m.start()].lower())
+
+
+def episode_match(rdt_name: str, queue_title: str) -> bool:
+    """
+    Fallback match when names_match fails.
+    Succeeds if both titles share the same SxxExx AND their series slugs
+    share a common prefix of at least 4 characters.
+    Handles cases where the RDT torrent name and Sonarr queue title are
+    different releases for the same episode (e.g. grabbed separately).
+    """
+    rdt_ep = _extract_sxxexx(rdt_name)
+    q_ep = _extract_sxxexx(queue_title)
+    if not rdt_ep or not q_ep or rdt_ep != q_ep:
+        return False
+    rdt_slug = _series_slug(rdt_name)
+    q_slug = _series_slug(queue_title)
+    if not rdt_slug or not q_slug:
+        return False
+    # Common prefix of at least 4 chars (enough to distinguish series)
+    min_len = min(len(rdt_slug), len(q_slug))
+    prefix_len = sum(1 for i in range(min_len) if rdt_slug[i] == q_slug[i])
+    return prefix_len >= 4
 
 
 def blocklist_queue_item(
@@ -328,14 +370,20 @@ def process_app(
         matched = False
         for item in queue:
             title = item.get("title", "")
-            if not names_match(torrent["name"], title):
+            match_type = None
+            if names_match(torrent["name"], title):
+                match_type = "title"
+            elif episode_match(torrent["name"], title):
+                match_type = "episode_fallback"
+            if match_type is None:
                 continue
 
             queue_id = item["id"]
             media_id = item.get(media_id_key)
             log(
                 f"INFO  [{app}] matched torrent '{torrent['name']}' "
-                f"-> queue id={queue_id} title={title!r} | {torrent['reason']}"
+                f"-> queue id={queue_id} title={title!r} "
+                f"match={match_type} | {torrent['reason']}"
             )
             matched = True
 
