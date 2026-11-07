@@ -405,11 +405,14 @@ def run_once(config: dict) -> None:
         seeds = t.get("seeds")
 
         # A torrent is stuck if it is in a known stuck state long enough,
-        # OR if it is nominally "downloading" but has 0 seeders — with 0
-        # seeders there is no data source and progress is impossible.
+        # OR if it has 0 seeders and is in any active (non-done) state long
+        # enough — covers "downloading", "checkingResumeData", "metaDL", and
+        # any other transient state TorBox may emit. With 0 seeders there is
+        # no data source and progress is impossible regardless of state label.
         zero_seed_stuck = (
             zero_seed_check
-            and status == "downloading"
+            and status not in DONE_STATUSES
+            and status not in STUCK_STATUSES
             and isinstance(seeds, int)
             and seeds == 0
             and age_min >= stuck_minutes
