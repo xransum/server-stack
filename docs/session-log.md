@@ -9,6 +9,42 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-11-07 — TrueNAS NFS uid mismatch + quality profile fixes
+
+**Context:** MobLand S02 import failures revealed two systemic issues that had been
+silently affecting the stack for months.
+
+**Issue 1 — NFS uid mismatch (1,686+ affected directories):**
+TrueNAS creates directories as uid 950 (`truenas_admin`). Sonarr/Radarr run as uid
+1000 (`abc`/`ransum`). NFS maps ownership numerically — uid 950 dirs with mode
+`drwxr-xr-x` are unwritable by uid 1000. Sonarr/Radarr silently fail with
+"Failed to import episode" and no useful UI error. Only visible in
+`/config/logs/sonarr.txt` as `UnauthorizedAccessException`.
+
+Fix: created `ransum` user (uid 1000) on TrueNAS, set as `mapall` user on all NFS
+shares. All NFS writes now land as uid 1000. Also enabled "Set Permissions" in
+Sonarr + Radarr (`chmod Folder = 755`). One-time remediation of all affected dirs
+run from both TrueNAS and media-vm. Documented in `docs/truenas.md`.
+
+**Issue 2 — Quality profiles missing WEB-DL/WEBRip:**
+Sonarr quality profiles (`Any`, `HD-720p`, `HD-1080p`, `Ultra-HD`, `HD-720p/1080p`)
+had WEB 720p, WEB 1080p, and WEB 2160p groups set to `allowed: false`. Since
+virtually all modern releases are WEB-DL or WEBRip, every manually-forced grab was
+downloading successfully but failing at import. Fixed by enabling WEB groups in all
+profiles. Same issue existed in Radarr for some profiles.
+
+**Other fixes this session:**
+- `scan-media.sh` executable bit missing in git — fixed with `git update-index --chmod=+x`
+- MobLand S02E06 EZTV release was a fake `.exe` — blocklisted, deleted, re-grabbed
+- Breaking Bad quality profile changed SD → Any (only 4K rips available for S04E11/12)
+- media-vm root disk expanded 60GB → 120GB via Proxmox resize + LVM (zero downtime)
+- torbox-blocklist `controltorrent` HTTP method fixed (DELETE → POST); was silently
+  not deleting any TorBox tasks since deployment
+- Sonarr blocklist purged (1,459 entries from rdt-client migration era)
+- Radarr + Sonarr re-searches triggered for all missing monitored content
+
+---
+
 ## 2026-11-06 — torbox-blocklist: stalled-status fix + zero-seeder check
 
 **Context:** Observed a torrent (`Breaking.Bad.S04E12.HDTV.VOSTFR.Gillop.avi`) stuck
