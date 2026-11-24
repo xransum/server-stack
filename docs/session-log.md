@@ -9,6 +9,47 @@ Format: newest entry at the top.
 
 ---
 
+---
+
+## 2026-11-23 — spotbook MCP server: design decisions
+
+**Context:** Building a personal MCP server so Claude can query a curated list
+of places and activities with live Google hours data. No LLM cost; facts from
+APIs and SQLite only.
+
+**Transport:** Streamable HTTP at `/mcp`. SDK default DNS-rebinding protection
+returns 421 for any non-localhost hostname until `TransportSecuritySettings(
+allowed_hosts=[...])` is passed. Behind NPM (TLS-terminating proxy), uvicorn
+needs `--proxy-headers` and NPM needs `proxy_buffering off`.
+
+**Auth decision — GitHub OAuth + embedded MCP auth server:**
+Rejected: MCP Tunnel (Enterprise only), static header auth (limited beta),
+`client_credentials` (not supported by Claude), Cloudflare Access (unverified
+interaction with MCP OAuth discovery flow), passphrase form (inferior UX on
+mobile).
+Chosen: GitHub OAuth as identity provider. `/authorize` redirects to GitHub,
+`/github/callback` verifies numeric GitHub user ID, server issues its own MCP
+tokens (access 1h, refresh 90d rotating). Re-auth is fully remote — one tap
+in browser. The MCP SDK's `OAuthAuthorizationServerProvider` handles the full
+embedded AS. SDK warning about this interface targets multi-tenant deployments;
+single-user personal server is the right pragmatic use case for it.
+
+**SDK version pinned:** `mcp==2.3.0` (latest as of 2026-11-23). Key deps it
+pulls: `httpx2`, `pydantic`, `starlette`, `uvicorn`, `anyio`, `sse-starlette`,
+`python-multipart`, `pyjwt[crypto]`.
+
+**Stdlib exception documented:** Python + MCP SDK breaks the repo's stdlib-only
+script rule. Explicit exception added to AGENTS.md and docs/spotbook.md.
+
+**Port:** 8086 (confirmed unused on media-vm as of 2026-11-23).
+
+**Still unverified (verify on deploy):**
+- Whether Claude connectors require port 443 only
+- Whether Streamable HTTP is selected by default or needs explicit config
+- Whether a web connector syncs to the phone app
+
+---
+
 ## 2026-11-07 — TrueNAS NFS uid mismatch + quality profile fixes
 
 **Context:** MobLand S02 import failures revealed two systemic issues that had been

@@ -414,6 +414,34 @@ services:
     env_file:
       - ${DNS_UPDATER_ENV:-./dns-updater.env}
 
+  # ---------------------------------------------------------------------------
+  # spotbook — personal MCP server for places + activities
+  # Exposed via CF Tunnel → NPM → media-vm:8086
+  # See docs/spotbook.md for setup and docs/workers/worker-10-spotbook.md
+  # ---------------------------------------------------------------------------
+
+  spotbook:
+    <<: *restart-policy
+    build:
+      context: ..
+      dockerfile: docker/spotbook/Dockerfile
+    image: server-stack/spotbook:local
+    profiles: [media]
+    container_name: spotbook
+    env_file:
+      - ${SPOTBOOK_ENV:-./spotbook.env}
+    volumes:
+      - spotbook-data:/data
+    ports:
+      - "127.0.0.1:8086:8086"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8086/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
 # ---------------------------------------------------------------------------
 # Named volumes (app config + databases — local to media-vm, NOT on NFS)
 # SQLite over NFS has locking issues. Keep config/DB on local VM disk.
@@ -432,3 +460,4 @@ volumes:
   clamav-db:
   portainer-data:
   shelfmark-config:
+  spotbook-data:
