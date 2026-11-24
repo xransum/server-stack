@@ -660,6 +660,10 @@ def tool_travel_time(
         resolved_dests.append((lat, lng))
         dest_labels.append(_dest_label(d, db))
 
+    # Check cache before calling API so the flag is accurate
+    cache_key = google_routes.cache_key(origin_lat, origin_lng, resolved_dests, mode)
+    was_cached = google_routes._db.get_travel_time_cache(cache_key) is not None
+
     # Call Routes API (or return from cache)
     try:
         elements = google_routes.compute_route_matrix(
@@ -715,27 +719,18 @@ def tool_travel_time(
             "status_code": status.get("code") if status else 0,
         })
 
-    cached_note = " (cached)" if not elements or all(
-        google_routes._db.get_travel_time_cache(
-            google_routes.cache_key(origin_lat, origin_lng, resolved_dests, mode)
-        ) is not None
-        for _ in [1]
-    ) else ""
-
     ok_count = sum(1 for r in results if r["ok"])
-    summary = (
-        f"{ok_count}/{len(results)} route(s) found by {mode.lower()}"
-        f"{cached_note}."
-    )
-    if depart_at:
-        summary += f" Departure: {depart_at}."
+    summary = f"{ok_count}/{len(results)} route(s) found by {mode.lower()}"
+    if was_cached:
+        summary += " (cached)"
+    summary += "."
 
     return {
         "origin": _dest_label(origin, db),
         "mode": mode,
         "depart_at": depart_at,
         "results": results,
-        "cached": cached_note != "",
+        "cached": was_cached,
         "summary": summary,
     }
 
