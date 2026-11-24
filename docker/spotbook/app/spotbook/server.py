@@ -512,9 +512,10 @@ def create_app() -> Starlette:
         Get travel time from one origin to up to 5 destinations.
         origin / destinations: spot UUID, Google place_id, or 'lat,lng' string.
         mode: DRIVE | WALK | BICYCLE | TRANSIT
-        depart_at: optional ISO-8601 datetime — accepted for compatibility but
-                   not forwarded to the API (Google rejects departure times
-                   without traffic routing, and spotbook never uses traffic routing).
+        depart_at: accepted but ignored — spotbook uses static routing only
+                   (no traffic). Durations are distance ÷ speed limit and will
+                   be identical regardless of time of day. For rush-hour trips
+                   on congested routes, the real drive will likely take longer.
         Results are cached 24 hours. Billing: Routes Essentials, 1 element per destination.
         Call usage_status() first if planning multiple calls to check remaining quota.
         """

@@ -728,7 +728,8 @@ def tool_travel_time(
     return {
         "origin": _dest_label(origin, db),
         "mode": mode,
-        "depart_at": depart_at,
+        "traffic_aware": False,
+        "note": "Durations are static (no traffic). depart_at is ignored.",
         "results": results,
         "cached": was_cached,
         "summary": summary,
