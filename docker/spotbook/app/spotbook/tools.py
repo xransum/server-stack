@@ -627,8 +627,9 @@ def tool_travel_time(
 
     origin / destinations: spot UUID, Google place_id, or 'lat,lng' string.
     mode: DRIVE | WALK | BICYCLE | TRANSIT
-    depart_at: optional ISO-8601 datetime (used for TRANSIT scheduling only —
-               does NOT trigger traffic routing, does NOT affect cost).
+    depart_at: accepted for compatibility but ignored — Google requires traffic
+               routing to use departure times, and spotbook never uses traffic
+               routing (always Essentials SKU, no extra cost).
 
     Results are cached 24 hours. Cache hits cost nothing.
     Billing: Routes Essentials, 1 element per destination. Never Pro or Enterprise.

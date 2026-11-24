@@ -491,18 +491,12 @@ class GoogleRoutesClient:
                 for lat, lng in dest_lls
             ],
             "travelMode": mode,
-            # No routingPreference — stays at Essentials SKU
+            # No routingPreference — stays at Essentials SKU.
+            # NOTE: departureTime cannot be set with TRAFFIC_UNAWARE routing
+            # (Google returns 400). Since we never use traffic routing, we
+            # never send departureTime. The depart_at parameter is accepted
+            # by the tool for API compatibility but silently ignored here.
         }
-
-        if depart_at:
-            # Normalize to RFC3339 for the API
-            try:
-                dt = datetime.fromisoformat(depart_at)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                body["departureTime"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except ValueError:
-                log.warning("Invalid depart_at '%s' — ignored", depart_at)
 
         url = f"{ROUTES_BASE}/distanceMatrix/v2:computeRouteMatrix"
         data = json.dumps(body).encode()
@@ -534,21 +528,21 @@ class GoogleRoutesClient:
                 f"Routes API returned {e.code}: {body_text}"
             ) from e
 
-        # The matrix API returns NDJSON (one JSON object per line)
-        elements = []
-        for line in raw.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                # Each line is either a single element or an array wrapper
-                if isinstance(obj, list):
-                    elements.extend(obj)
-                else:
-                    elements.append(obj)
-            except json.JSONDecodeError:
-                log.warning("Could not parse Routes API response line: %s", line[:100])
+        # The Routes API returns a JSON array (not NDJSON) for the matrix.
+        # Parse the whole body as a single JSON value.
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            log.error("Could not parse Routes API response: %s", raw[:200])
+            raise RuntimeError(f"Routes API returned unparseable response: {e}") from e
+
+        if isinstance(parsed, list):
+            elements = parsed
+        elif isinstance(parsed, dict):
+            # Unexpected single-object response — wrap it
+            elements = [parsed]
+        else:
+            elements = []
 
         return elements
 
