@@ -26,8 +26,8 @@ COPY --from=builder /install /usr/local
 WORKDIR /app
 COPY docker/spotbook/app/ .
 
-# Create data directory (volume mount point)
-RUN mkdir -p /data /data/backups
+# Create data directory and set ownership before dropping privileges
+RUN mkdir -p /data /data/backups && chown -R nobody:nogroup /data
 
 # Run as nobody (no docker socket access needed)
 USER nobody
