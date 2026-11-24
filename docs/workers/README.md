@@ -31,7 +31,7 @@ If you accidentally commit a secret, stop immediately and tell the user before p
 | [Worker 7](worker-7-edge-vm.md) | edge-vm ingress migration | ✅ completed | — |
 | [Worker 8](worker-8-shelfmark.md) | Shelfmark pipeline | ✅ completed | — |
 | [Worker 9](worker-9-torbox.md) | Migrate rdt-client → TorBoxarr (TorBox) | ✅ completed | — |
-| [Worker 10](worker-10-spotbook.md) | spotbook personal MCP server | ⏳ pending | Anytime (branch: spotbook) |
+| [Worker 10](worker-10-spotbook.md) | spotbook personal MCP server | ✅ completed | — |
 
 ## Parent session
 

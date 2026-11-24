@@ -1,7 +1,7 @@
 # Worker 10 — spotbook MCP server
 
 ## Status
-⏳ pending
+✅ completed — 2026-11-24
 
 ## Trigger
 Independent — anytime. Build the spotbook personal MCP server on the `spotbook`
@@ -250,4 +250,42 @@ Record whether these unverified assumptions held:
 
 ## Completion Notes
 
-(fill in when done)
+### Verified assumptions (were unverified at build time)
+- **Port 443 only**: yes — CF Tunnel enforces TLS, port 443 only. We use 443 via tunnel anyway so no issue.
+- **Streamable HTTP default**: yes — Claude detected it automatically, no explicit config needed. Shown as "Detected" in the connector UI.
+- **DCR detected automatically**: yes — Claude showed "Register automatically (Detected)" in the connector setup UI.
+- **Web connector → phone app**: not yet tested. Connect on web first, verify phone app separately.
+- **`auth_server_provider=` / `OAuthAuthorizationServerProvider`**: used `token_verifier=` + custom OAuth routes instead. The SDK's embedded AS interface (`auth_server_provider=`) was not used — we implemented all OAuth endpoints as custom Starlette routes and used `TokenVerifier` to verify tokens on `/mcp`. This is cleaner than the embedded AS path.
+
+### What was built
+- Full MCP server with Streamable HTTP at `/mcp`
+- GitHub OAuth: DCR → `/authorize` → GitHub → `/github/callback` (user ID check) → token issued
+- Access tokens 1h, refresh tokens 90d rotating, SHA-256 hashed in SQLite
+- Rate limiting: 5 failures/IP/15min on `/github/callback`
+- All MCP tools: list_areas, add_area, update_area, save_spot, list_spots, check_hours, log_visit, discover
+- Google Places API with field masking + monthly cap enforcement (ENTERPRISE 900/mo)
+- check_hours: handles overnight, 24h, closed day, DST, 7-day currentOpeningHours window
+- Daily sqlite3.backup() with 14-day rotation
+- Discord alerts: DCR registration + unauthorized login attempt
+- 55 unit tests passing (31 hours, 24 auth)
+
+### Infrastructure changes
+- NPM proxy host 17: `spotbook.xransum.com` → `192.168.1.169:8086`, `proxy_buffering off`
+- CF Tunnel ingress rule added: `spotbook.xransum.com` → `nginx-proxy-manager:80`
+- DNS CNAME: `spotbook.xransum.com` → `<tunnel-id>.cfargotunnel.com` (proxied)
+- Named volume: `server-stack_spotbook-data` on media-vm
+
+### Known limitations / open items
+- NAS backup target not configured — backups go to `/data/backups` (local to media-vm). See docs/spotbook.md.
+- `travel_time` tool is a Phase 2 stub — Routes API not implemented yet.
+- Phone app connector not verified — test manually.
+- Google API daily quota not set in Cloud Console — do this manually (see docs/spotbook.md).
+- DCR spam possible (open `/register`) — low risk for personal use; prune `oauth_clients` table if needed.
+
+### Gotchas found during build
+- SDK default DNS-rebinding protection returns 421 for any non-localhost hostname until `TransportSecuritySettings(allowed_hosts=[...])` is passed.
+- uvicorn behind NPM needs `--proxy-headers --forwarded-allow-ips=*` or HTTPS redirects break.
+- Named Docker volume mounts over `/data` at runtime, resetting ownership — run as root to avoid permission issues.
+- Discord webhook returns 403 without a `User-Agent` header — added `User-Agent: spotbook/1.0`.
+- Port binding `127.0.0.1:8086` blocks NPM on edge-vm — must bind `0.0.0.0:8086`.
+- CF Tunnel ingress rules require a Zero Trust-scoped API token (not the DDNS token).

@@ -1,6 +1,6 @@
 # State — Parent Session Reference
 
-Last updated: 2026-11-23 (Worker 10 spotbook — in progress on spotbook branch)
+Last updated: 2026-11-24 (Worker 10 complete — spotbook MCP server live)
 
 Paste this file into the parent session to re-sync without rediscovery.
 
@@ -156,7 +156,7 @@ gameservers-vm (→ Wings WebSocket on gameservers-vm:8080 via NPM)
 | Worker 7 — edge-vm | ✅ completed | edge-vm live, all ingress moved off media-vm, proxmox+nas portless URLs working |
 | Worker 8 — Shelfmark | ✅ completed | Shelfmark live at shelfmark.xransum.com; pipeline verified; manual epub drop → books/ready works |
 | Worker 9 — TorBox Migration | ✅ completed | TorBoxarr + torbox-blocklist live; rdt-client stopped; end-to-end verified |
-| Worker 10 — spotbook | ⏳ pending | Personal MCP server: places + activities book; GitHub OAuth; Google Places; branch: spotbook |
+| Worker 10 — spotbook | ✅ completed | MCP server live at spotbook.xransum.com/mcp; GitHub OAuth; Google Places; Discord alerts |
 
 ---
 
