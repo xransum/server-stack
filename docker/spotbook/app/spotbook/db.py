@@ -6,22 +6,26 @@ from other modules; always use Db.conn() to get a connection.
 
 WAL mode is set at open time. The DB file must be on a local filesystem —
 do NOT use an NFS path (SQLite WAL locking is incompatible with NFS).
+
+Schema versions:
+  1 — initial schema (Phase 1)
+  2 — adds travel_time_cache, api_usage_daily, cap_warnings_sent
 """
 
 import sqlite3
 import logging
-import os
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Generator
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Schema — all DDL in one place, versioned via user_version pragma
+# Schema — all DDL in one place, versioned via schema_version table
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 PRAGMA journal_mode = WAL;
@@ -32,90 +36,114 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 CREATE TABLE IF NOT EXISTS areas (
-    id          TEXT PRIMARY KEY,          -- uuid
+    id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL UNIQUE,
-    timezone    TEXT NOT NULL,             -- IANA zone, e.g. America/New_York
+    timezone    TEXT NOT NULL,
     center_lat  REAL NOT NULL,
     center_lng  REAL NOT NULL,
     radius_km   REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS spots (
-    id                  TEXT PRIMARY KEY,  -- uuid (internal, stable)
-    place_id            TEXT UNIQUE,       -- Google place_id, null for manual spots
+    id                  TEXT PRIMARY KEY,
+    place_id            TEXT UNIQUE,
     area_id             TEXT NOT NULL REFERENCES areas(id),
     name                TEXT NOT NULL,
-    category            TEXT NOT NULL,     -- restaurant|bar|coffee|activity|outdoors|venue|other
+    category            TEXT NOT NULL,
     address             TEXT,
     lat                 REAL,
     lng                 REAL,
-    timezone            TEXT,              -- IANA zone from Google or area fallback
-    price_level         INTEGER,           -- 0-4 (Google scale)
+    timezone            TEXT,
+    price_level         INTEGER,
     rating              REAL,
     user_rating_count   INTEGER,
-    regular_hours_json  TEXT,              -- Google regularOpeningHours periods JSON
-    current_hours_json  TEXT,              -- Google currentOpeningHours periods JSON (next ~7 days)
-    hours_fetched_at    TEXT,              -- ISO-8601 UTC timestamp of last hours fetch
-    occasions_json      TEXT DEFAULT '[]', -- JSON array of strings
-    tags_json           TEXT DEFAULT '[]', -- JSON array of strings
+    regular_hours_json  TEXT,
+    current_hours_json  TEXT,
+    hours_fetched_at    TEXT,
+    occasions_json      TEXT DEFAULT '[]',
+    tags_json           TEXT DEFAULT '[]',
     notes               TEXT,
-    saved_at            TEXT NOT NULL      -- ISO-8601 UTC timestamp
+    saved_at            TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS visits (
-    id          TEXT PRIMARY KEY,          -- uuid
+    id          TEXT PRIMARY KEY,
     spot_id     TEXT NOT NULL REFERENCES spots(id),
-    visited_at  TEXT NOT NULL,             -- ISO-8601 UTC
-    rating      INTEGER,                   -- 1-5
+    visited_at  TEXT NOT NULL,
+    rating      INTEGER,
     notes       TEXT,
     occasion    TEXT,
     with_whom   TEXT
 );
 
--- OAuth: registered MCP clients (Claude performs DCR on first connect)
 CREATE TABLE IF NOT EXISTS oauth_clients (
     client_id               TEXT PRIMARY KEY,
-    client_secret_hash      TEXT,          -- SHA-256 hex; null for public clients
-    redirect_uris_json      TEXT NOT NULL, -- JSON array
+    client_secret_hash      TEXT,
+    redirect_uris_json      TEXT NOT NULL,
     client_name             TEXT,
     registered_at           TEXT NOT NULL
 );
 
--- Single-use authorization codes (60s TTL, PKCE-bound)
 CREATE TABLE IF NOT EXISTS auth_codes (
     code                TEXT PRIMARY KEY,
     client_id           TEXT NOT NULL,
     redirect_uri        TEXT NOT NULL,
-    code_challenge      TEXT NOT NULL,     -- S256 PKCE challenge
+    code_challenge      TEXT NOT NULL,
     scope               TEXT,
-    expires_at          TEXT NOT NULL,     -- ISO-8601 UTC
+    expires_at          TEXT NOT NULL,
     used                INTEGER NOT NULL DEFAULT 0
 );
 
--- Access + refresh tokens (stored as SHA-256 hashes)
 CREATE TABLE IF NOT EXISTS tokens (
-    token_hash          TEXT PRIMARY KEY,  -- SHA-256 hex of raw token
-    token_type          TEXT NOT NULL,     -- 'access' | 'refresh'
+    token_hash          TEXT PRIMARY KEY,
+    token_type          TEXT NOT NULL,
     client_id           TEXT NOT NULL,
     scope               TEXT,
-    expires_at          TEXT NOT NULL,     -- ISO-8601 UTC
-    refresh_token_hash  TEXT,              -- for access tokens: hash of paired refresh token
-    access_token_hash   TEXT,              -- for refresh tokens: hash of current access token
+    expires_at          TEXT NOT NULL,
+    refresh_token_hash  TEXT,
+    access_token_hash   TEXT,
     revoked             INTEGER NOT NULL DEFAULT 0
 );
 
--- Google API usage counter (per SKU per month)
+-- Google API monthly usage counter (per SKU per Pacific-time month).
+-- SKU values: essentials | pro | enterprise | routes_essentials | routes_pro | routes_enterprise
 CREATE TABLE IF NOT EXISTS api_usage (
-    month   TEXT NOT NULL,  -- YYYY-MM
-    sku     TEXT NOT NULL,  -- 'essentials' | 'pro' | 'enterprise'
+    month   TEXT NOT NULL,  -- YYYY-MM in America/Los_Angeles
+    sku     TEXT NOT NULL,
     count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (month, sku)
+);
+
+-- Google API daily usage counter (per SKU per UTC date).
+-- Used for burst limiting: no single day may exceed daily_cap.
+CREATE TABLE IF NOT EXISTS api_usage_daily (
+    date    TEXT NOT NULL,  -- YYYY-MM-DD UTC
+    sku     TEXT NOT NULL,
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, sku)
+);
+
+-- Travel time cache for non-traffic requests (24h TTL).
+-- Keyed by SHA-256 of normalised origin+destinations+mode.
+CREATE TABLE IF NOT EXISTS travel_time_cache (
+    cache_key   TEXT PRIMARY KEY,
+    result_json TEXT NOT NULL,
+    cached_at   TEXT NOT NULL,
+    expires_at  TEXT NOT NULL
+);
+
+-- Tracks whether an 80% cap warning Discord notice has been sent
+-- this month for each SKU, to avoid spamming.
+CREATE TABLE IF NOT EXISTS cap_warnings_sent (
+    month   TEXT NOT NULL,  -- YYYY-MM in America/Los_Angeles
+    sku     TEXT NOT NULL,
     PRIMARY KEY (month, sku)
 );
 
 -- Rate limiting: failed auth attempts per IP
 CREATE TABLE IF NOT EXISTS auth_failures (
     ip              TEXT NOT NULL,
-    failed_at       TEXT NOT NULL,  -- ISO-8601 UTC
+    failed_at       TEXT NOT NULL,
     endpoint        TEXT NOT NULL
 );
 
@@ -125,6 +153,32 @@ CREATE INDEX IF NOT EXISTS idx_visits_spot     ON visits(spot_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_expires  ON tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_codes_expires   ON auth_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_failures_ip     ON auth_failures(ip, failed_at);
+CREATE INDEX IF NOT EXISTS idx_cache_expires   ON travel_time_cache(expires_at);
+"""
+
+# DDL for only the Phase 2 tables — used by the migration path
+_SCHEMA_V2_TABLES = """
+CREATE TABLE IF NOT EXISTS api_usage_daily (
+    date    TEXT NOT NULL,
+    sku     TEXT NOT NULL,
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, sku)
+);
+
+CREATE TABLE IF NOT EXISTS travel_time_cache (
+    cache_key   TEXT PRIMARY KEY,
+    result_json TEXT NOT NULL,
+    cached_at   TEXT NOT NULL,
+    expires_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cap_warnings_sent (
+    month   TEXT NOT NULL,
+    sku     TEXT NOT NULL,
+    PRIMARY KEY (month, sku)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_expires ON travel_time_cache(expires_at);
 """
 
 # ---------------------------------------------------------------------------
@@ -139,7 +193,6 @@ SEED_AREAS = [
         "center_lat": 38.7509,
         "center_lng": -77.4753,
         "radius_km": 25.0,
-        # Covers Gainesville, Centreville, Haymarket
     },
     {
         "id": "area-redmond-wa",
@@ -148,9 +201,43 @@ SEED_AREAS = [
         "center_lat": 47.6740,
         "center_lng": -122.1215,
         "radius_km": 25.0,
-        # Covers Bellevue, Kirkland, Bothell
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Pacific time helpers
+# ---------------------------------------------------------------------------
+
+def pacific_month() -> str:
+    """Return current month as YYYY-MM in America/Los_Angeles (Google billing timezone)."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m")
+
+
+def pacific_date_str() -> str:
+    """Return current date as YYYY-MM-DD in America/Los_Angeles."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+
+
+def pacific_next_month_reset() -> str:
+    """Return ISO date string of the first day of next month in Pacific time."""
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    # Advance to first of next month
+    if now.month == 12:
+        reset = now.replace(year=now.year + 1, month=1, day=1,
+                            hour=0, minute=0, second=0, microsecond=0)
+    else:
+        reset = now.replace(month=now.month + 1, day=1,
+                            hour=0, minute=0, second=0, microsecond=0)
+    return reset.strftime("%Y-%m-%d")
+
+
+def utc_date_str() -> str:
+    """Return current date as YYYY-MM-DD UTC (used for daily burst counter)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 # ---------------------------------------------------------------------------
@@ -186,15 +273,12 @@ class Db:
             c.close()
 
     def _init_schema(self) -> None:
-        """Create tables and seed data on first run."""
         with self.conn() as c:
-            # Check if schema_version table exists
             row = c.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
             ).fetchone()
             already_initialized = row is not None
 
-            # Create all tables
             c.executescript(SCHEMA_SQL)
 
             if not already_initialized:
@@ -210,8 +294,7 @@ class Db:
                 if current < SCHEMA_VERSION:
                     log.info(
                         "Migrating database from version %d to %d",
-                        current,
-                        SCHEMA_VERSION,
+                        current, SCHEMA_VERSION,
                     )
                     self._migrate(c, current)
                     c.execute(
@@ -220,7 +303,6 @@ class Db:
                     )
 
     def _seed(self, c: sqlite3.Connection) -> None:
-        """Insert seed areas on fresh database."""
         for area in SEED_AREAS:
             c.execute(
                 """
@@ -234,13 +316,124 @@ class Db:
         log.info("Seeded %d areas", len(SEED_AREAS))
 
     def _migrate(self, c: sqlite3.Connection, from_version: int) -> None:
-        """Apply incremental migrations."""
-        # Future migrations go here as elif from_version == N blocks.
-        # For version 1 there is nothing to migrate from (fresh schema only).
-        pass
+        if from_version < 2:
+            log.info("Applying migration v1 → v2: travel_time_cache, api_usage_daily, cap_warnings_sent")
+            c.executescript(_SCHEMA_V2_TABLES)
 
+    # -----------------------------------------------------------------------
+    # Atomic API usage enforcement
+    # -----------------------------------------------------------------------
+
+    def check_and_increment_usage(
+        self,
+        sku: str,
+        amount: int,
+        monthly_cap: int,
+        daily_cap: int,
+    ) -> tuple[int, int]:
+        """
+        Atomically increment both monthly and daily counters for a SKU.
+
+        Checks BEFORE committing — if either cap would be exceeded, rolls back
+        the increment and raises CapExceededError.
+
+        Returns (new_monthly_total, new_daily_total) on success.
+
+        This is the ONLY way to increment API usage. Never call
+        increment_api_usage directly from google.py.
+
+        Monthly key: Pacific time YYYY-MM (matches Google billing cycle).
+        Daily key: UTC date YYYY-MM-DD (burst limiting, slightly conservative).
+        """
+        from .google import CapExceededError  # avoid circular import at module level
+
+        month = pacific_month()
+        date = utc_date_str()
+        reset_date = pacific_next_month_reset()
+
+        with self.conn() as c:
+            # --- Monthly ---
+            c.execute(
+                """
+                INSERT INTO api_usage (month, sku, count)
+                VALUES (?, ?, ?)
+                ON CONFLICT (month, sku) DO UPDATE SET count = count + excluded.count
+                """,
+                (month, sku, amount),
+            )
+            new_monthly = c.execute(
+                "SELECT count FROM api_usage WHERE month = ? AND sku = ?",
+                (month, sku),
+            ).fetchone()[0]
+
+            if new_monthly > monthly_cap:
+                # Roll back — subtract what we just added
+                c.execute(
+                    "UPDATE api_usage SET count = count - ? WHERE month = ? AND sku = ?",
+                    (amount, month, sku),
+                )
+                raise CapExceededError(
+                    sku=sku,
+                    cap=monthly_cap,
+                    current=new_monthly - amount,
+                    reset_date=reset_date,
+                    limit_type="monthly",
+                )
+
+            # --- Daily ---
+            c.execute(
+                """
+                INSERT INTO api_usage_daily (date, sku, count)
+                VALUES (?, ?, ?)
+                ON CONFLICT (date, sku) DO UPDATE SET count = count + excluded.count
+                """,
+                (date, sku, amount),
+            )
+            new_daily = c.execute(
+                "SELECT count FROM api_usage_daily WHERE date = ? AND sku = ?",
+                (date, sku),
+            ).fetchone()[0]
+
+            if new_daily > daily_cap:
+                # Roll back both increments
+                c.execute(
+                    "UPDATE api_usage SET count = count - ? WHERE month = ? AND sku = ?",
+                    (amount, month, sku),
+                )
+                c.execute(
+                    "UPDATE api_usage_daily SET count = count - ? WHERE date = ? AND sku = ?",
+                    (amount, date, sku),
+                )
+                raise CapExceededError(
+                    sku=sku,
+                    cap=daily_cap,
+                    current=new_daily - amount,
+                    reset_date="tomorrow UTC",
+                    limit_type="daily",
+                )
+
+        return new_monthly, new_daily
+
+    def get_api_usage(self, month: str, sku: str) -> int:
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT count FROM api_usage WHERE month = ? AND sku = ?",
+                (month, sku),
+            ).fetchone()
+            return row[0] if row else 0
+
+    def get_daily_usage(self, date: str, sku: str) -> int:
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT count FROM api_usage_daily WHERE date = ? AND sku = ?",
+                (date, sku),
+            ).fetchone()
+            return row[0] if row else 0
+
+    # Keep the old increment_api_usage for the backup/non-critical path only.
+    # google.py must use check_and_increment_usage instead.
     def increment_api_usage(self, month: str, sku: str, amount: int = 1) -> int:
-        """Increment the API usage counter and return the new total."""
+        """Non-atomic increment. Only for internal maintenance. Do not use from google.py."""
         with self.conn() as c:
             c.execute(
                 """
@@ -256,14 +449,69 @@ class Db:
             ).fetchone()
             return row[0] if row else amount
 
-    def get_api_usage(self, month: str, sku: str) -> int:
-        """Return current usage count for a SKU in a month."""
+    # -----------------------------------------------------------------------
+    # Cap warning tracking
+    # -----------------------------------------------------------------------
+
+    def has_warned_cap(self, month: str, sku: str) -> bool:
         with self.conn() as c:
             row = c.execute(
-                "SELECT count FROM api_usage WHERE month = ? AND sku = ?",
+                "SELECT 1 FROM cap_warnings_sent WHERE month = ? AND sku = ?",
                 (month, sku),
             ).fetchone()
-            return row[0] if row else 0
+            return row is not None
+
+    def record_cap_warning(self, month: str, sku: str) -> None:
+        with self.conn() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO cap_warnings_sent (month, sku) VALUES (?, ?)",
+                (month, sku),
+            )
+
+    # -----------------------------------------------------------------------
+    # Travel time cache
+    # -----------------------------------------------------------------------
+
+    def get_travel_time_cache(self, cache_key: str) -> dict | None:
+        """Return cached result if present and not expired, else None."""
+        import json
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT result_json FROM travel_time_cache WHERE cache_key = ? AND expires_at > ?",
+                (cache_key, now_iso),
+            ).fetchone()
+        if row:
+            return json.loads(row[0])
+        return None
+
+    def set_travel_time_cache(self, cache_key: str, result: dict) -> None:
+        """Store a travel time result with a 24h TTL."""
+        import json
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(hours=24)).isoformat()
+        with self.conn() as c:
+            c.execute(
+                """
+                INSERT OR REPLACE INTO travel_time_cache
+                    (cache_key, result_json, cached_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (cache_key, json.dumps(result), now.isoformat(), expires),
+            )
+
+    def prune_expired_cache(self) -> None:
+        """Remove expired travel time cache entries."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            c.execute(
+                "DELETE FROM travel_time_cache WHERE expires_at <= ?",
+                (now_iso,),
+            )
+
+    # -----------------------------------------------------------------------
+    # Auth helpers (unchanged from Phase 1)
+    # -----------------------------------------------------------------------
 
     def record_auth_failure(self, ip: str, endpoint: str, now_iso: str) -> None:
         with self.conn() as c:

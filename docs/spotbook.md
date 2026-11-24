@@ -133,8 +133,8 @@ No new infrastructure.
 | Item | Status | Notes |
 |---|---|---|
 | NAS backup target | Open | `SPOTBOOK_BACKUP_DIR` defaults to local path on media-vm (`/data/backups`). Proper target: TrueNAS dataset `media/backups/spotbook` exported via NFS to media-vm. Manual TrueNAS step. Document in notes when done. |
-| `travel_time` tool | Phase 2 | Routes API `computeRouteMatrix`. Pricing unverified. Stub present in tools.py. |
-| Routes API pricing | Unverified | Google pricing page blocks fetching. Check manually in Cloud Console. |
+| `travel_time` tool | ✅ implemented | Routes API `computeRouteMatrix`. Always Essentials SKU (no traffic routing). Cached 24h. |
+| Routes API pricing | ✅ verified 2026-11-24 | TRANSIT = Essentials (not Pro/Enterprise). No traffic routing = always Essentials. See billing notes below. |
 | Port 443 only? | Unverified until deploy | We use 443 via CF Tunnel anyway. |
 | Streamable HTTP default? | Unverified until deploy | May need explicit config in Claude connector. |
 | Phone app connector? | Unverified until deploy | Claude web connector may or may not sync to phone app. Test in Step 6. |
@@ -155,9 +155,47 @@ All secrets in `compose/.env` on media-vm only (gitignored). Never commit.
 | `SPOTBOOK_GITHUB_ALLOWED_USER_ID` | Yes | — | Your numeric GitHub user ID (`curl https://api.github.com/users/<login>` → `id` field) |
 | `SPOTBOOK_DB_PATH` | No | `/data/spotbook.db` | Local volume — not NFS |
 | `SPOTBOOK_BACKUP_DIR` | No | `/data/backups` | See NAS open item above |
-| `SPOTBOOK_ENTERPRISE_MONTHLY_CAP` | No | `900` | Google Enterprise SKU monthly cap (free tier: 1000) |
-| `SPOTBOOK_PRO_MONTHLY_CAP` | No | `4500` | Google Pro SKU monthly cap (free tier: 5000) |
+| `SPOTBOOK_ESSENTIALS_MONTHLY_CAP` | No | `8000` | Places Essentials cap (free tier: 10,000) |
+| `SPOTBOOK_PRO_MONTHLY_CAP` | No | `4000` | Places Pro cap (free tier: 5,000) |
+| `SPOTBOOK_ENTERPRISE_MONTHLY_CAP` | No | `800` | Places Enterprise cap (free tier: 1,000) |
+| `SPOTBOOK_ROUTES_ESSENTIALS_MONTHLY_CAP` | No | `8000` | Routes Essentials cap (free tier: 10,000) |
+| `SPOTBOOK_ROUTES_PRO_MONTHLY_CAP` | No | `4000` | Routes Pro cap (free tier: 5,000) — unused, no traffic routing |
+| `SPOTBOOK_ROUTES_ENTERPRISE_MONTHLY_CAP` | No | `800` | Routes Enterprise cap (free tier: 1,000) — unused |
+| `SPOTBOOK_DAILY_CAP_FRACTION` | No | `0.1` | Fraction of monthly cap allowed per UTC day (10% = 800 routes elements/day) |
 | `SPOTBOOK_DISCORD_WEBHOOK` | No | — | Personal Discord webhook for operational alerts. Empty = no Discord. Do NOT reuse scan-media webhook. |
+
+---
+
+## Google API billing notes (verified 2026-11-24)
+
+**Billing timezone**: Google Cloud bills on **America/Los_Angeles** (US Pacific Time).
+Monthly counters reset at midnight Pacific on the 1st of each month.
+Source: confirmed from Google billing documentation.
+
+**Places API (New) SKUs:**
+- Essentials: `location`, `displayName`, `formattedAddress`, `id`
+- Pro: `timeZone`
+- Enterprise: `regularOpeningHours`, `currentOpeningHours`, `rating`, `userRatingCount`, `priceLevel`
+
+We only request Enterprise fields on `save_spot()` and weekly hours refresh.
+Text Search (`discover`) uses Essentials fields only.
+
+**Routes API (Compute Route Matrix) SKUs:**
+- Essentials: no `routingPreference`, any `travelMode` including TRANSIT
+- Pro: `routingPreference: TRAFFIC_AWARE` or `TRAFFIC_AWARE_OPTIMAL`
+- Enterprise: two-wheel routing, toll calculation, large vehicle routing
+
+**We never set `routingPreference`** — every `travel_time` call is Essentials.
+TRANSIT mode is confirmed Essentials (not listed as a Pro or Enterprise trigger).
+`depart_at` is forwarded to the API as a departure time hint for TRANSIT scheduling
+but does not trigger traffic routing and does not change the SKU.
+
+Billing unit for the matrix: **1 element = 1 origin × 1 destination**.
+One `travel_time` call with 3 destinations = 3 elements.
+
+**Two-layer cost protection:**
+1. Code caps (in `api_usage` table, enforced atomically before each call)
+2. Google Cloud Console hard quotas (enforced by Google, blocks even if code has a bug)
 
 ---
 
@@ -168,12 +206,18 @@ All secrets in `compose/.env` on media-vm only (gitignored). Never commit.
 3. APIs & Services → Library → enable **Places API (New)** and **Routes API**
 4. APIs & Services → Credentials → Create API key
 5. Restrict the key:
-   - Application restrictions: IP addresses → add `192.168.1.169` (media-vm LAN IP)
-   - API restrictions: Places API (New), Routes API
-6. Set hard daily quota to protect against runaway costs:
-   - APIs & Services → Quotas & System Limits → Places API (New)
-   - Find "Requests per day" → edit → set to `50`
-7. Store the key as `GOOGLE_MAPS_API_KEY` in `compose/.env` on media-vm only
+   - Application restrictions: none (home IP is dynamic — dynamic IPs break key restrictions)
+   - API restrictions: **Places API (New)**, **Routes API**
+6. Set hard quotas in **Google Maps Platform → Quotas** (last-resort safety net):
+
+| Service | Quota name | Value set |
+|---|---|---|
+| Routes API | DistanceMatrix - ComputeRouteMatrix per-element quota per day | 500 |
+| Routes API | DistanceMatrix - ComputeRouteMatrix per-element quota per minute | 100 |
+| Places API (New) | GetPlaceRequest per day | 30 |
+| Places API (New) | SearchTextRequest per day | 30 |
+
+7. Store the key as `GOOGLE_MAPS_API_KEY` in `compose/spotbook.env` on media-vm only
 
 ---
 

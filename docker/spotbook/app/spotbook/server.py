@@ -46,7 +46,7 @@ from pydantic import AnyHttpUrl
 from .auth import SpotbookAuthProvider
 from .backup import start_backup_scheduler
 from .db import Db
-from .google import GooglePlacesClient
+from .google import GooglePlacesClient, GoogleRoutesClient
 from .tools import (
     tool_add_area,
     tool_check_hours,
@@ -57,6 +57,7 @@ from .tools import (
     tool_save_spot,
     tool_travel_time,
     tool_update_area,
+    tool_usage_status,
 )
 
 log = logging.getLogger(__name__)
@@ -81,9 +82,17 @@ def _build_config() -> dict[str, Any]:
         "github_client_id": _require_env("SPOTBOOK_GITHUB_CLIENT_ID"),
         "github_client_secret": _require_env("SPOTBOOK_GITHUB_CLIENT_SECRET"),
         "allowed_github_user_id": int(_require_env("SPOTBOOK_GITHUB_ALLOWED_USER_ID")),
-        "enterprise_cap": int(os.environ.get("SPOTBOOK_ENTERPRISE_MONTHLY_CAP", "900")),
-        "pro_cap": int(os.environ.get("SPOTBOOK_PRO_MONTHLY_CAP", "4500")),
         "discord_webhook": os.environ.get("SPOTBOOK_DISCORD_WEBHOOK", ""),
+        # Places caps (80% of free tier)
+        "places_essentials_cap": int(os.environ.get("SPOTBOOK_ESSENTIALS_MONTHLY_CAP", "8000")),
+        "places_pro_cap": int(os.environ.get("SPOTBOOK_PRO_MONTHLY_CAP", "4000")),
+        "places_enterprise_cap": int(os.environ.get("SPOTBOOK_ENTERPRISE_MONTHLY_CAP", "800")),
+        # Routes caps (80% of free tier)
+        "routes_essentials_cap": int(os.environ.get("SPOTBOOK_ROUTES_ESSENTIALS_MONTHLY_CAP", "8000")),
+        "routes_pro_cap": int(os.environ.get("SPOTBOOK_ROUTES_PRO_MONTHLY_CAP", "4000")),
+        "routes_enterprise_cap": int(os.environ.get("SPOTBOOK_ROUTES_ENTERPRISE_MONTHLY_CAP", "800")),
+        # Daily burst: fraction of monthly cap allowed per day
+        "daily_cap_fraction": float(os.environ.get("SPOTBOOK_DAILY_CAP_FRACTION", "0.1")),
     }
 
 
@@ -304,8 +313,20 @@ def create_app() -> Starlette:
     google = GooglePlacesClient(
         api_key=cfg["google_api_key"],
         db=db,
-        enterprise_cap=cfg["enterprise_cap"],
-        pro_cap=cfg["pro_cap"],
+        discord_webhook=cfg["discord_webhook"],
+        essentials_cap=cfg["places_essentials_cap"],
+        pro_cap=cfg["places_pro_cap"],
+        enterprise_cap=cfg["places_enterprise_cap"],
+        daily_cap_fraction=cfg["daily_cap_fraction"],
+    )
+    google_routes = GoogleRoutesClient(
+        api_key=cfg["google_api_key"],
+        db=db,
+        discord_webhook=cfg["discord_webhook"],
+        essentials_cap=cfg["routes_essentials_cap"],
+        pro_cap=cfg["routes_pro_cap"],
+        enterprise_cap=cfg["routes_enterprise_cap"],
+        daily_cap_fraction=cfg["daily_cap_fraction"],
     )
     auth_provider = SpotbookAuthProvider(
         db=db,
@@ -483,14 +504,36 @@ def create_app() -> Starlette:
     @mcp.tool(annotations={"readOnlyHint": True})
     def travel_time(
         origin: str,
-        destination: str,
+        destinations: list[str],
         mode: str = "DRIVE",
         depart_at: str | None = None,
     ) -> dict:
         """
-        [Phase 2 — not yet available] Get travel time between two locations.
+        Get travel time from one origin to up to 5 destinations.
+        origin / destinations: spot UUID, Google place_id, or 'lat,lng' string.
+        mode: DRIVE | WALK | BICYCLE | TRANSIT
+        depart_at: optional ISO-8601 datetime — used for TRANSIT scheduling only,
+                   does not trigger traffic routing, does not affect cost.
+        Results are cached 24 hours. Billing: Routes Essentials, 1 element per destination.
+        Call usage_status() first if planning multiple calls to check remaining quota.
         """
-        return tool_travel_time()
+        return tool_travel_time(
+            db=db,
+            google_routes=google_routes,
+            origin=origin,
+            destinations=destinations,
+            mode=mode,
+            depart_at=depart_at,
+        )
+
+    @mcp.tool(annotations={"readOnlyHint": True})
+    def usage_status() -> dict:
+        """
+        Return current Google API usage by SKU — monthly count, cap, percentage,
+        daily count, daily cap, and reset date. Call this proactively before
+        multi-destination travel_time calls, or when asked how much quota remains.
+        """
+        return tool_usage_status(db=db, google_places=google, google_routes=google_routes)
 
     # -----------------------------------------------------------------------
     # Build MCP streamable HTTP app with transport security

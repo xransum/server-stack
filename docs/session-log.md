@@ -11,6 +11,51 @@ Format: newest entry at the top.
 
 ---
 
+## 2026-11-24 — spotbook Phase 2: travel_time + API cap hardening
+
+**Context:** Implementing the travel_time tool (Routes API) and tightening all
+API usage limits to ensure zero billing risk.
+
+**TRANSIT SKU verified**: TRANSIT mode is Routes Essentials — not listed as a
+Pro or Enterprise trigger in Google's SKU details page. The same as DRIVE/WALK/BICYCLE
+with no routingPreference. Per-request element cap is 100 (vs 625 for other modes).
+
+**No traffic routing decision**: We never set `routingPreference`. Every travel_time
+call is Essentials SKU. `depart_at` is forwarded for TRANSIT scheduling only — does
+not trigger traffic routing, does not change SKU or cost.
+
+**Pacific time billing confirmed**: Google Cloud bills on America/Los_Angeles.
+Monthly counters reset at midnight Pacific on the 1st of each month.
+Code uses `zoneinfo.ZoneInfo("America/Los_Angeles")` for month keys.
+
+**Cap defaults set at 80% of free tier**:
+  Places: Essentials 8000/10000, Pro 4000/5000, Enterprise 800/1000
+  Routes: Essentials 8000/10000, Pro 4000/5000, Enterprise 800/1000
+
+**Atomic cap enforcement**: SQLite WAL + single connection check+increment+rollback.
+Cap check happens BEFORE the API call. Failed calls still count (conservative).
+Daily burst limit: 10% of monthly cap per day (configurable via SPOTBOOK_DAILY_CAP_FRACTION).
+
+**Two-layer protection**:
+  1. Code caps (atomic SQLite, before each call)
+  2. Google Cloud Console hard quotas (last resort, blocks at Google level)
+  Cloud Console quotas set: Routes 500 elements/day, Places 30 req/day each.
+
+**24h cache**: All travel_time results cached by SHA-256(origin+destinations+mode).
+Cache hit = zero API cost. Only non-traffic results cached (all results, since we
+never use traffic routing).
+
+**80% cap warning**: One Discord notice per SKU per month when usage crosses 80%
+of the monthly cap. Never includes spot data, queries, or locations in the message.
+
+**Schema migration v1→v2**: Added `travel_time_cache`, `api_usage_daily`,
+`cap_warnings_sent` tables. Existing DBs migrate automatically on startup.
+
+**New tools**: `travel_time` (up to 5 destinations, cached) + `usage_status`
+(shows all 6 SKU counters, caps, percentages, reset date).
+
+---
+
 ## 2026-11-23 — spotbook MCP server: design decisions
 
 **Context:** Building a personal MCP server so Claude can query a curated list

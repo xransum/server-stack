@@ -614,11 +614,203 @@ def tool_discover(
     }
 
 
-def tool_travel_time(*args: Any, **kwargs: Any) -> dict:
-    """Phase 2 — not yet implemented."""
+def tool_travel_time(
+    db: Any,
+    google_routes: Any,
+    origin: str,
+    destinations: list[str],
+    mode: str = "DRIVE",
+    depart_at: str | None = None,
+) -> dict:
+    """
+    Get travel time from one origin to up to 5 destinations.
+
+    origin / destinations: spot UUID, Google place_id, or 'lat,lng' string.
+    mode: DRIVE | WALK | BICYCLE | TRANSIT
+    depart_at: optional ISO-8601 datetime (used for TRANSIT scheduling only —
+               does NOT trigger traffic routing, does NOT affect cost).
+
+    Results are cached 24 hours. Cache hits cost nothing.
+    Billing: Routes Essentials, 1 element per destination. Never Pro or Enterprise.
+    """
+    from .google import CapExceededError, _format_duration, _format_distance
+
+    mode = mode.upper()
+    if mode not in {"DRIVE", "WALK", "BICYCLE", "TRANSIT"}:
+        raise ValueError(f"Invalid mode '{mode}'. Valid: DRIVE, WALK, BICYCLE, TRANSIT")
+
+    if not destinations:
+        raise ValueError("At least one destination is required.")
+    if len(destinations) > 5:
+        raise ValueError("Maximum 5 destinations per call.")
+
+    # Resolve origin
+    origin_lat, origin_lng = _resolve_to_latlng(origin, db)
+    if origin_lat is None or origin_lng is None:
+        raise ValueError(f"Could not resolve origin '{origin}' to coordinates.")
+
+    # Resolve each destination
+    resolved_dests: list[tuple[float, float]] = []
+    dest_labels: list[str] = []
+    for d in destinations:
+        lat, lng = _resolve_to_latlng(d, db)
+        if lat is None or lng is None:
+            raise ValueError(f"Could not resolve destination '{d}' to coordinates.")
+        resolved_dests.append((lat, lng))
+        dest_labels.append(_dest_label(d, db))
+
+    # Call Routes API (or return from cache)
+    try:
+        elements = google_routes.compute_route_matrix(
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
+            dest_lls=resolved_dests,
+            mode=mode,
+            depart_at=depart_at,
+        )
+    except CapExceededError as e:
+        raise ValueError(str(e)) from e
+
+    # Build results indexed by destinationIndex
+    indexed: dict[int, dict] = {}
+    for el in elements:
+        idx = el.get("destinationIndex", 0)
+        indexed[idx] = el
+
+    results = []
+    for i, label in enumerate(dest_labels):
+        el = indexed.get(i, {})
+        status = el.get("status", {})
+        condition = el.get("condition", "ROUTE_EXISTS")
+        ok = (
+            (not status or status.get("code", 0) == 0)
+            and condition == "ROUTE_EXISTS"
+        )
+
+        # duration comes as e.g. {"seconds": "720"}
+        raw_dur = el.get("duration")
+        dur_secs: int | None = None
+        if raw_dur:
+            try:
+                # API returns duration as string "NNNs" or object {"seconds": "NNN"}
+                if isinstance(raw_dur, str):
+                    dur_secs = int(raw_dur.rstrip("s"))
+                elif isinstance(raw_dur, dict):
+                    dur_secs = int(raw_dur.get("seconds", 0))
+            except (ValueError, TypeError):
+                dur_secs = None
+
+        dist_m = el.get("distanceMeters")
+
+        results.append({
+            "destination": label,
+            "destination_index": i,
+            "ok": ok,
+            "duration_seconds": dur_secs,
+            "duration_text": _format_duration(dur_secs) if ok else "unavailable",
+            "distance_meters": dist_m,
+            "distance_text": _format_distance(dist_m) if ok else "unavailable",
+            "condition": condition,
+            "status_code": status.get("code") if status else 0,
+        })
+
+    cached_note = " (cached)" if not elements or all(
+        google_routes._db.get_travel_time_cache(
+            google_routes.cache_key(origin_lat, origin_lng, resolved_dests, mode)
+        ) is not None
+        for _ in [1]
+    ) else ""
+
+    ok_count = sum(1 for r in results if r["ok"])
+    summary = (
+        f"{ok_count}/{len(results)} route(s) found by {mode.lower()}"
+        f"{cached_note}."
+    )
+    if depart_at:
+        summary += f" Departure: {depart_at}."
+
     return {
-        "error": "travel_time is a Phase 2 feature and is not yet available.",
-        "summary": "travel_time is not yet implemented.",
+        "origin": _dest_label(origin, db),
+        "mode": mode,
+        "depart_at": depart_at,
+        "results": results,
+        "cached": cached_note != "",
+        "summary": summary,
+    }
+
+
+def tool_usage_status(
+    db: Any,
+    google_places: Any,
+    google_routes: Any,
+) -> dict:
+    """
+    Return current Google API usage by SKU — monthly count, cap, percentage,
+    daily count, daily cap, and reset date. Useful before expensive operations
+    or when asked how much quota remains.
+    """
+    from .google import (
+        PLACES_SKU_ESSENTIALS, PLACES_SKU_PRO, PLACES_SKU_ENTERPRISE,
+        ROUTES_SKU_ESSENTIALS, ROUTES_SKU_PRO, ROUTES_SKU_ENTERPRISE,
+        _SKU_LABELS,
+    )
+    from .db import pacific_month, pacific_next_month_reset, utc_date_str
+
+    month = pacific_month()
+    today = utc_date_str()
+    reset_date = pacific_next_month_reset()
+
+    all_skus = [
+        (PLACES_SKU_ESSENTIALS,  google_places._caps[PLACES_SKU_ESSENTIALS]),
+        (PLACES_SKU_PRO,         google_places._caps[PLACES_SKU_PRO]),
+        (PLACES_SKU_ENTERPRISE,  google_places._caps[PLACES_SKU_ENTERPRISE]),
+        (ROUTES_SKU_ESSENTIALS,  google_routes._caps[ROUTES_SKU_ESSENTIALS]),
+        (ROUTES_SKU_PRO,         google_routes._caps[ROUTES_SKU_PRO]),
+        (ROUTES_SKU_ENTERPRISE,  google_routes._caps[ROUTES_SKU_ENTERPRISE]),
+    ]
+
+    daily_fraction = google_places._daily_cap_fraction
+    skus_out = []
+    any_warning = False
+
+    for sku, monthly_cap in all_skus:
+        monthly_count = db.get_api_usage(month, sku)
+        daily_cap = max(1, int(monthly_cap * daily_fraction))
+        daily_count = db.get_daily_usage(today, sku)
+        monthly_pct = round(monthly_count / monthly_cap * 100, 1) if monthly_cap else 0
+        daily_pct = round(daily_count / daily_cap * 100, 1) if daily_cap else 0
+        warning = monthly_pct >= 80
+
+        if warning:
+            any_warning = True
+
+        skus_out.append({
+            "sku": sku,
+            "label": _SKU_LABELS.get(sku, sku),
+            "monthly_count": monthly_count,
+            "monthly_cap": monthly_cap,
+            "monthly_pct": monthly_pct,
+            "daily_count": daily_count,
+            "daily_cap": daily_cap,
+            "daily_pct": daily_pct,
+            "warning": warning,
+        })
+
+    summary = "All SKUs within normal limits." if not any_warning else \
+        "⚠️ One or more SKUs are at 80%+ of their monthly cap."
+
+    return {
+        "month": month,
+        "reset_date": reset_date,
+        "skus": skus_out,
+        "cloud_console_quotas": {
+            "note": "Hard quotas set in Google Cloud Console as a second safety layer.",
+            "Routes API - ComputeRouteMatrix per-element/day": 500,
+            "Routes API - ComputeRouteMatrix per-element/min": 100,
+            "Places API (New) - GetPlaceRequest per day": 30,
+            "Places API (New) - SearchTextRequest per day": 30,
+        },
+        "summary": summary,
     }
 
 
@@ -663,3 +855,44 @@ def _resolve_near(
 
     log.warning("Could not resolve 'near' value: %s", near)
     return None, None
+
+
+def _resolve_to_latlng(
+    ref: str,
+    db: Any,
+) -> tuple[float | None, float | None]:
+    """
+    Resolve a spot UUID, Google place_id, or 'lat,lng' string to (lat, lng).
+    Same as _resolve_near but without needing a pre-fetched spots list.
+    """
+    # Try "lat,lng" format first
+    if "," in ref:
+        parts = ref.split(",", 1)
+        try:
+            return float(parts[0].strip()), float(parts[1].strip())
+        except ValueError:
+            pass
+
+    # Look up by spot UUID or place_id in the database
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT lat, lng FROM spots WHERE id = ? OR place_id = ?",
+            (ref, ref),
+        ).fetchone()
+    if row:
+        return row["lat"], row["lng"]
+
+    log.warning("Could not resolve ref to lat/lng: %s", ref)
+    return None, None
+
+
+def _dest_label(ref: str, db: Any) -> str:
+    """Return a human-readable label for a spot reference."""
+    if "," in ref:
+        return ref  # raw lat,lng — use as-is
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT name FROM spots WHERE id = ? OR place_id = ?",
+            (ref, ref),
+        ).fetchone()
+    return row["name"] if row else ref
