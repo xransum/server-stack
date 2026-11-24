@@ -18,11 +18,10 @@ import os
 import sqlite3
 import threading
 import time
-import urllib.request
-import urllib.parse
-import json
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .discord import notify as discord_notify
 
 log = logging.getLogger(__name__)
 
@@ -32,21 +31,7 @@ BACKUP_HOUR_UTC = 3              # run at 03:00 UTC
 
 
 def _discord_notify(webhook_url: str, message: str) -> None:
-    """Post a message to Discord. Silently ignores errors."""
-    if not webhook_url:
-        return
-    try:
-        data = json.dumps({"content": message}).encode()
-        req = urllib.request.Request(
-            webhook_url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10):
-            pass
-    except Exception as e:
-        log.warning("Discord notify failed: %s", e)
+    discord_notify(webhook_url, message)
 
 
 def run_backup(db_path: str, backup_dir: str, discord_webhook: str = "") -> bool:

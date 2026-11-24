@@ -39,6 +39,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .discord import notify as discord_notify
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -208,12 +210,14 @@ class SpotbookAuthProvider:
         github_client_id: str,
         github_client_secret: str,
         allowed_github_user_id: int,
+        discord_webhook: str = "",
     ) -> None:
         self._db = db
         self._base_url = public_base_url.rstrip("/")
         self._github_client_id = github_client_id
         self._github_client_secret = github_client_secret
         self._allowed_user_id = allowed_github_user_id
+        self._discord_webhook = discord_webhook
 
         # In-memory PKCE/state store for active authorization flows
         # Maps state → {client_id, redirect_uri, code_challenge, scope}
@@ -259,6 +263,11 @@ class SpotbookAuthProvider:
             )
 
         log.info("Registered new OAuth client: %s", client_id)
+        client_name = client_metadata.get("client_name") or "unknown"
+        discord_notify(
+            self._discord_webhook,
+            f":door: **spotbook DCR**: new client registered — `{client_name}` (`{client_id}`)",
+        )
         return {
             "client_id": client_id,
             "client_id_issued_at": int(datetime.now(timezone.utc).timestamp()),
@@ -375,6 +384,11 @@ class SpotbookAuthProvider:
                 "GitHub login attempt by unauthorized user ID %d (allowed: %d)",
                 user_id,
                 self._allowed_user_id,
+            )
+            discord_notify(
+                self._discord_webhook,
+                f":no_entry: **spotbook unauthorized login attempt** from IP `{client_ip}` "
+                f"(GitHub user ID: `{user_id}`)",
             )
             raise PermissionError("Not authorized.")
 

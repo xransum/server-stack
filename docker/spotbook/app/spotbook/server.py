@@ -313,6 +313,7 @@ def create_app() -> Starlette:
         github_client_id=cfg["github_client_id"],
         github_client_secret=cfg["github_client_secret"],
         allowed_github_user_id=cfg["allowed_github_user_id"],
+        discord_webhook=cfg["discord_webhook"],
     )
 
     mcp_url = f"{cfg['public_base_url']}/mcp"
