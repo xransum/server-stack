@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
 FROM base AS builder
 
 WORKDIR /build
-COPY requirements.txt .
+COPY docker/spotbook/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ COPY --from=builder /install /usr/local
 
 # Copy application source
 WORKDIR /app
-COPY app/ .
+COPY docker/spotbook/app/ .
 
 # Create data directory (volume mount point)
 RUN mkdir -p /data /data/backups
