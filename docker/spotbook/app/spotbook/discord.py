@@ -27,7 +27,10 @@ def notify(webhook_url: str | None, message: str) -> None:
         req = urllib.request.Request(
             webhook_url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "spotbook/1.0",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10):
